@@ -6,18 +6,26 @@ import telebot
 from telebot import types
 from time import sleep
 from subprocess import Popen
-from modules.minecraft import minecraft_server_status
-from functions import check_user, check_status, restart, delete  # Assuming these are compatible or need adaptation
-from modules.pi import pitemp, pimemory, pidisk, picpuusage, piuptime
+
+from ..common.pi import pitemp, pimemory, pidisk, picpuusage, piuptime, restart
+from ...holly.secrets import whitelist
 import os
 import re
 
-from modules.ai import ai_on_pi  # ai testing
-from modules.simplescrape import scrape_article_p_tags
+from ..common.ai import ai_on_pi  # ai testing
+from ...common.scraping import scrape_article_p_tags
 
-# Replace with your actual bot token
+
 
 bot = telebot.TeleBot(token)
+
+def check_user(message, bot, _id):
+    if _id not in whitelist:
+        reply_text = 'Sorry, this is a private bot.'
+        bot.send_message(_id, text=reply_text)
+        return False
+    else:
+        return True
 
 def restart_caller(message):
     chat_id = message.chat.id
@@ -39,8 +47,7 @@ def start(message):
 
     # defining the keyboard layout
     kbd_layout = [['Holly status',],
-                  ['Holly uptime',],
-                  ['Minecraft status']]
+                  ['Holly uptime',]]
 
     # converting layout to markup
     # documentation: https://pytba.readthedocs.io/en/latest/types.html#telebot.types.ReplyKeyboardMarkup
@@ -50,17 +57,6 @@ def start(message):
     msg = bot.send_message(chat_id, text="Holly activated", reply_markup=kbd)
     # delete(None, chat_id, msg.message_id) # Context is not directly available in telebot
 
-@bot.message_handler(regexp=r"Minecraft status|/minecraft_status")
-def mc_status(message):
-    """
-    minecraft status
-    """
-    # sending the reply message with the selected option
-    chat_id = message.chat.id
-    # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
-    msg = minecraft_server_status()
-    bot.send_message(chat_id, msg, reply_markup=types.ReplyKeyboardRemove())
-    # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
 
 @bot.message_handler(regexp=r"Holly status")
 def status(message):

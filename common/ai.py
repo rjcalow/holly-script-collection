@@ -1,6 +1,6 @@
 import ollama
 # Example usage:
-remote_ollama_ip = "100.105.81.22"  # Replace with your remote server's IP.
+remote_ollama_ip = "127.0.0.1"  # Replace with your remote server's IP.
 model = "gemma3:1b"  # Replace with the model you want to use.
 
 
