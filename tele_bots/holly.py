@@ -1,31 +1,60 @@
+import sys
 import os
 
-token = os.environ.get('hollytoken')
+# Get the absolute path to the directory containing holly.py
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# script_dir will be: /home/holly/holly-script-collection/telebots
+
+# Go up one level to 'holly-script-collection'
+base_dir = os.path.dirname(script_dir)
+# base_dir will be: /home/holly/holly-script-collection
+
+# Construct the path to the 'common' directory
+common_dir = os.path.join(base_dir, "common")
+
+# Get the user's home directory
+home_dir = os.path.expanduser("~")
+
+# Add 'holly-script-collection' and the home directory to sys.path
+# Adding at the beginning prioritizes these locations
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+if home_dir not in sys.path:
+    sys.path.insert(0, home_dir)
+
+token = os.environ.get("hollytoken")
 
 import telebot
 from telebot import types
 from time import sleep
 from subprocess import Popen
 
-from ..common.pi import pitemp, pimemory, pidisk, picpuusage, piuptime, restart
-from ...holly.secrets import whitelist
+from common.pi import pitemp, pimemory, pidisk, picpuusage, piuptime, restart
+from _secrets import whitelist, hollytoken
 import os
 import re
 
-from ..common.ai import ai_on_pi  # ai testing
-from ...common.scraping import scrape_article_p_tags
+
+import sys
+import os
 
 
+from common.ai import ai_on_pi  # ai testing
+from common.scraping import scrape_article_p_tags
 
-bot = telebot.TeleBot(token)
+
+bot = telebot.TeleBot(hollytoken)
+
 
 def check_user(message, bot, _id):
-    if _id not in whitelist:
-        reply_text = 'Sorry, this is a private bot.'
+    print(_id)
+    if str(_id) not in whitelist:
+        reply_text = "Sorry, this is a private bot."
         bot.send_message(_id, text=reply_text)
         return False
     else:
         return True
+
 
 def restart_caller(message):
     chat_id = message.chat.id
@@ -37,7 +66,8 @@ def restart_caller(message):
         Popen([cmd], shell=True)
         # subprocess.call(['sh', '$HOME/start.sh'])
 
-@bot.message_handler(commands=['holly', 'start'])
+
+@bot.message_handler(commands=["holly", "start"])
 def start(message):
     """
     method to handle the /start command and create keyboard
@@ -46,8 +76,14 @@ def start(message):
     # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
 
     # defining the keyboard layout
-    kbd_layout = [['Holly status',],
-                  ['Holly uptime',]]
+    kbd_layout = [
+        [
+            "Holly status",
+        ],
+        [
+            "Holly uptime",
+        ],
+    ]
 
     # converting layout to markup
     # documentation: https://pytba.readthedocs.io/en/latest/types.html#telebot.types.ReplyKeyboardMarkup
@@ -68,7 +104,9 @@ def status(message):
     # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
     msg = check_status()
     try:
-        msg = msg + "\n\n 🌡️ {}c\n📈 {} \n🐏 {} \n💾 {}\n\n".format(pitemp(), picpuusage(), pimemory(), pidisk())
+        msg = msg + "\n\n 🌡️ {}c\n📈 {} \n🐏 {} \n💾 {}\n\n".format(
+            pitemp(), picpuusage(), pimemory(), pidisk()
+        )
     except:
         msg = msg
     if "not " in msg:
@@ -80,6 +118,7 @@ def status(message):
     bot.send_message(chat_id, msg, reply_markup=types.ReplyKeyboardRemove())
     # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
 
+
 @bot.message_handler(regexp=r"Holly uptime")
 def uptime(message):
     """
@@ -88,31 +127,37 @@ def uptime(message):
     # sending the reply message with the selected option
     chat_id = message.chat.id
     # Assuming check_user function can work with telebot's message object
-    check_user(message, None, chat_id)
+    if not check_user(message, bot, chat_id):
+        return
     # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
     bot.send_message(chat_id, piuptime(), reply_markup=types.ReplyKeyboardRemove())
     # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
 
-@bot.message_handler(commands=['ask'])
+
+@bot.message_handler(commands=["ask"])
 def askAI_handler(message):
     chat_id = message.chat.id
     # Assuming check_user function can work with telebot's message object
-    check_user(message, None, chat_id)
+    if not check_user(message, bot, chat_id):
+        return
     text = " ".join(message.text.split()[1:])  # Get the arguments after /ask
     reply = ai_on_pi(text)
     bot.send_message(chat_id=chat_id, text=str(reply))
 
+
 # Function to find URLs in a message
 def find_urls(text):
     # Regular expression pattern for URLs
-    url_pattern = r'(https?://[^\s]+)'
+    url_pattern = r"(https?://[^\s]+)"
     return re.findall(url_pattern, text)
 
+
 # Function to handle incoming messages
-@bot.message_handler(func=lambda message: True) # Handles all text messages
+@bot.message_handler(func=lambda message: True)  # Handles all text messages
 def handle_message(message):
     # Assuming check_user function can work with telebot's message object
-    check_user(message, None, message.chat.id)
+    if not check_user(message, bot, message.chat.id):
+        return
     text = message.text  # Get the text of the incoming message
     urls = find_urls(text)  # Find URLs in the text
     response = None  # Initialize response to None
@@ -122,7 +167,8 @@ def handle_message(message):
         print(article_text)
         try:
             response = ai_on_pi(
-                "Condense the following text into a summary of 350 characters or less, focusing solely on the core content. Remove all privacy, cookie, feedback, and legal statements. Provide the summary text only, without any introductory phrases, headings, or character counts. Text:" + article_text
+                "Condense the following text into a summary of 350 characters or less, focusing solely on the core content. Remove all privacy, cookie, feedback, and legal statements. Provide the summary text only, without any introductory phrases, headings, or character counts. Text:"
+                + article_text
             )
         except:
             response = None
@@ -136,10 +182,12 @@ def handle_message(message):
             # reply_to_message_id=message.message_id # Already handled by reply_to
         )
 
-@bot.message_handler(commands=['restart'])
+
+@bot.message_handler(commands=["restart"])
 def restart_command(message):
     restart_caller(message)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     print("Bot started...")
     bot.polling(none_stop=True)

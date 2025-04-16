@@ -1,11 +1,9 @@
 #!/bin/bash
 
-scripts=(
-  'holly.py'
-)
+scripts=('holly.py',)
 
 dir_="/home/holly/holly-script-collection/telebots/"
-python_env="/home/holly/holly_env/env/bin/python3"
+python_env="/home/holly/holly_env/bin/python3"
 
 # Kill all running instances of the scripts at the start
 echo "Stopping any existing instances of the scripts..."
