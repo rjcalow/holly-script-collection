@@ -22,22 +22,16 @@ if base_dir not in sys.path:
 if home_dir not in sys.path:
     sys.path.insert(0, home_dir)
 
-token = os.environ.get("hollytoken")
 
 import telebot
 from telebot import types
 from time import sleep
-from subprocess import Popen
+import subprocess
 
 from common.pi import pitemp, pimemory, pidisk, picpuusage, piuptime, restart
 from _secrets import whitelist, hollytoken
-import os
+
 import re
-
-
-import sys
-import os
-
 
 from common.ai import ai_on_pi  # ai testing
 from common.scraping import scrape_article_p_tags

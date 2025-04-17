@@ -216,3 +216,75 @@ def remove_privacy_statements(text):
     for pattern in patterns:
         text = re.sub(pattern, "", text, flags=re.IGNORECASE | re.DOTALL)
     return text
+
+'''
+instagram stuff
+'''
+def find_media(folder_path, extensions=(".mp4", ".jpg")):
+    """
+    Finds the path of the first media file with specified extensions in the given folder.
+
+    Args:
+        folder_path: The path to the folder to search.
+        extensions: A tuple of file extensions to look for (default: .mp4, .jpg).
+
+    Returns:
+        The full path to the media file, or None if no matching file is found.
+    """
+    for root, _, files in os.walk(folder_path):
+        for file in files:
+            if file.lower().endswith(extensions):
+                return os.path.join(root, file)
+    return None
+
+def get_shortcode_from_url(url):
+    """
+    Extracts the Instagram shortcode from a given URL.
+
+    Args:
+        url: The Instagram post URL.
+
+    Returns:
+        The extracted shortcode, or None if the URL is invalid.
+    """
+    match = re.search(r"instagram\.com/p/([^/?#&]+)", url)
+    return match.group(1) if match else None
+
+def download_instagram_post(url, download_folder="downloads"):
+    """
+    Downloads an Instagram post (video or image) using Instaloader.
+
+    Args:
+        url: The Instagram post URL.
+        download_folder: The folder where the post will be downloaded (default: "downloads").
+
+    Returns:
+        The path to the downloaded media file, or None if the download fails.
+    """
+    loader = instaloader.Instaloader(
+        download_videos=True,
+        download_video_thumbnails=False,
+        download_comments=False,
+        save_metadata=False,
+        post_metadata_txt_pattern=''
+    )
+
+    shortcode = get_shortcode_from_url(url)
+    if not shortcode:
+        print("Invalid URL or could not extract shortcode.")
+        return None
+
+    try:
+        post = instaloader.Post.from_shortcode(loader.context, shortcode)
+        loader.download_post(post, target=download_folder)
+        print("Post downloaded successfully.")
+        
+        media_file = find_media(download_folder)
+        if media_file:
+            return media_file
+        else:
+            print("No media file found in the download folder.")
+            return None
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return None
