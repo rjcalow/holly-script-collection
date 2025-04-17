@@ -2,7 +2,7 @@
 
 scripts=('holly.py', 'reddit_bot.py')
 
-dir_="/home/holly/holly-script-collection/telebots/"
+dir_="/home/holly/holly-script-collection/tele_bots/"
 python_env="/home/holly/holly_env/bin/python3"
 
 # Kill all running instances of the scripts at the start
