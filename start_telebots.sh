@@ -1,6 +1,6 @@
 #!/bin/bash
 
-scripts=('holly.py',)
+scripts=('holly.py', 'reddit_bot.py')
 
 dir_="/home/holly/holly-script-collection/telebots/"
 python_env="/home/holly/holly_env/bin/python3"
