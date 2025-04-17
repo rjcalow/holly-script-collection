@@ -70,28 +70,31 @@ def restart_caller(message):
 @bot.message_handler(commands=["holly", "start"])
 def start(message):
     """
-    method to handle the /start command and create keyboard
+    method to handle the /start or /holly command and create keyboard
     """
     chat_id = message.chat.id
-    # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
 
     # defining the keyboard layout
-    kbd_layout = [
-        [
-            "Holly status",
-        ],
-        [
-            "Holly uptime",
-        ],
-    ]
+    kbd = types.ReplyKeyboardMarkup(resize_keyboard=True)  # Use resize for better display
+    kbd.row("Holly status")  # adds one row with one button
+    kbd.row("Holly uptime")  # adds another row with one button
 
-    # converting layout to markup
-    # documentation: https://pytba.readthedocs.io/en/latest/types.html#telebot.types.ReplyKeyboardMarkup
-    kbd = types.ReplyKeyboardMarkup(kbd_layout)
+    # sending the reply to activate the keyboard
+    bot.send_message(chat_id, text="Holly activated", reply_markup=kbd)
 
-    # sending the reply so as to activate the keyboard
-    msg = bot.send_message(chat_id, text="Holly activated", reply_markup=kbd)
-    # delete(None, chat_id, msg.message_id) # Context is not directly available in telebot
+def check_status():
+    msg = ""
+    scripts = ["reddit.py", "shit_weather.py", "train.py", "tombot.py", "feedy.py"]
+    for script in scripts:
+        l = subprocess.getstatusoutput("ps aux | grep " + script + "| grep -v grep | awk '{print $2}'")
+        if l[1]:
+            msg += script + " is running \n"
+        else:
+            msg += script + " is not running \n"
+    return msg
+
+def restart():
+    subprocess.call("/home/pi/start.sh", shell=True)
 
 
 @bot.message_handler(regexp=r"Holly status")
