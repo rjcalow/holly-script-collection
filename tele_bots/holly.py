@@ -50,17 +50,6 @@ def check_user(message, bot, _id):
         return True
 
 
-def restart_caller(message):
-    chat_id = message.chat.id
-    # Assuming check_user function can work with telebot's message object
-    if check_user(message, None, chat_id) == True:
-        print("restarting")
-        bot.send_message(chat_id=chat_id, text="restarting this bitch")
-        cmd = "sh $HOME/start.sh"
-        Popen([cmd], shell=True)
-        # subprocess.call(['sh', '$HOME/start.sh'])
-
-
 @bot.message_handler(commands=["holly", "start"])
 def start(message):
     """
@@ -78,7 +67,7 @@ def start(message):
 
 def check_status():
     msg = ""
-    scripts = ["reddit.py", "shit_weather.py", "train.py", "tombot.py", "feedy.py"]
+    scripts = ["reddit_bot.py", "shit_weather.py", "train.py", "tombot.py", "feedy.py"]
     for script in scripts:
         l = subprocess.getstatusoutput("ps aux | grep " + script + "| grep -v grep | awk '{print $2}'")
         if l[1]:
@@ -88,7 +77,7 @@ def check_status():
     return msg
 
 def restart():
-    subprocess.call("/home/pi/start.sh", shell=True)
+    subprocess.call("/home/holly/holly-script-collection/start_telebots.sh", shell=True)
 
 
 @bot.message_handler(regexp=r"Holly status")
@@ -182,7 +171,14 @@ def handle_message(message):
 
 @bot.message_handler(commands=["restart"])
 def restart_command(message):
-    restart_caller(message)
+    chat_id = message.chat.id
+    # Assuming check_user function can work with telebot's message object
+    if check_user(message, None, chat_id) == True:
+        print("restarting")
+        bot.send_message(chat_id=chat_id, text="restarting this bitch")
+        cmd = "bash /home/holly/holly-script-collection/start_telebots.sh"
+        Popen([cmd], shell=True)
+        # subprocess.call(['sh', '$HOME/start.sh'])
 
 
 if __name__ == "__main__":
