@@ -22,80 +22,107 @@ if base_dir not in sys.path:
 if home_dir not in sys.path:
     sys.path.insert(0, home_dir)
 
-from _secrets import whitelist, reddittoken, groupchatid
+from _secrets import whitelist, reddittoken, groupchatid, r_client_id, r_client_secret
+# Replace with your Reddit API credentials
 
-import telebot
-import re
-import asyncio
-from red_downloader import RedDownloader
+REDDIT_USER_AGENT = "idk"  
 
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Replace with the path where you want to save downloaded files.  Make sure the bot has write permissions.
-DOWNLOAD_PATH = "/home/holly/downloads/"  # Example: "/home/user/downloads/" or "./downloads/"
-
-bot = telebot.TeleBot(reddittoken)
-downloader = RedDownloader(
-    download_dir=DOWNLOAD_PATH,
-    workers=5,  # Adjust as needed
-    log_level="INFO",  #  "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"
+reddit = praw.Reddit(
+    client_id=r_client_id,
+    client_secret=r_client_secret,
+    user_agent=REDDIT_USER_AGENT,
 )
+
+
+def download_file(url, filename):
+    """Downloads a file from a URL."""
+    try:
+        response = requests.get(url, stream=True)
+        response.raise_for_status()  # Raise an exception for bad status codes
+        with open(filename, "wb") as file:
+            for chunk in response.iter_content(chunk_size=8192):
+                file.write(chunk)
+        return True
+    except requests.exceptions.RequestException as e:
+        print(f"Error downloading {url}: {e}")
+        return False
+    except Exception as e:
+        print(f"Error writing file {filename}: {e}")
+        return False
+
 
 async def download_and_send(reddit_url, chat_id):
     """
-    Downloads media from a Reddit URL and sends it to a Telegram chat.
-
-    Args:
-        reddit_url (str): The Reddit URL to download from.
-        chat_id (int): The ID of the Telegram chat to send the media to.
+    Downloads media from a Reddit URL using PRAW and sends it to a Telegram chat.
     """
     try:
-        print(f"Downloading from: {reddit_url}") # added for debug
-        result = await downloader.download(reddit_url)
-        print(f"Download result: {result}") # added for debug
+        post = reddit.submission(url=reddit_url)
+        print(f"Downloading from: {reddit_url}")
 
-        if result and result.files:
-            for file_path in result.files:
-                try:
-                    if result.is_video:
-                        with open(file_path, 'rb') as video:
-                            bot.send_video(chat_id, video)
-                    elif result.is_image:
-                         with open(file_path, 'rb') as image:
-                            bot.send_photo(chat_id, image)
-                    else:
-                        with open(file_path, 'rb') as file:
-                            bot.send_document(chat_id, file)
-                except Exception as e:
-                    print(f"Error sending {file_path} to Telegram: {e}")
-                    bot.send_message(chat_id, f"Failed to send media file. Error: {e}")
-
-            if result.title:
-                bot.send_message(chat_id, f"Post Title: {result.title}\nOriginal URL: {reddit_url}")
-        elif result and result.error:
-            error_message = f"Download failed: {result.error}"
-            print(error_message)
-            bot.send_message(chat_id, error_message)
+        # Determine media type and download URL
+        media_url = None
+        if post.is_video:
+            if hasattr(post.media, 'reddit_video'):
+              media_url = post.media.reddit_video['fallback_url']
+            else:
+               print(f"No downloadable video found in post: {reddit_url}")
+               bot.send_message(chat_id, f"No downloadable video found.")
+               return
+        elif post.url.endswith(('.jpg', '.png', '.gif')):
+            media_url = post.url
+        # Handle gallery
+        elif hasattr(post, "is_gallery") and post.is_gallery:
+            for item_id, item in post.media_metadata.items():
+                if item['type'] == 'image':
+                    media_url = item['s']['u']  # Full-size image URL
+                    break #take first image
         else:
-            message = "No media found or download was unsuccessful."
-            print(message)
-            bot.send_message(chat_id, message)
+            print(f"Unsupported media type in post: {reddit_url}")
+            bot.send_message(chat_id, f"Unsupported media type.")
+            return
 
+        if media_url:
+            file_extension = os.path.splitext(media_url)[1]
+            filename = f"{DOWNLOAD_PATH}{post.id}{file_extension}"
+            if download_file(media_url, filename):
+                try:
+                    if post.is_video:
+                        with open(filename, 'rb') as video:
+                            bot.send_video(chat_id, video, caption=post.title)
+                    elif post.url.endswith(('.jpg', '.png', '.gif')):
+                        with open(filename, 'rb') as image:
+                            bot.send_photo(chat_id, image, caption=post.title)
+                    else:  # Handle other file types if needed
+                        with open(filename, 'rb') as file:
+                            bot.send_document(chat_id, file, caption=post.title)
+                    bot.send_message(chat_id, f"Post Title: {post.title}\nOriginal URL: {reddit_url}")
+
+                except Exception as e:
+                    print(f"Error sending media to Telegram: {e}")
+                    bot.send_message(chat_id, f"Failed to send media. Error: {e}")
+            else:
+                bot.send_message(chat_id, f"Failed to download media from {media_url}")
+        else:
+            bot.send_message(chat_id, f"No media found to download.")
+
+    except praw.exceptions.InvalidURL:
+        print(f"Invalid Reddit URL: {reddit_url}")
+        bot.send_message(chat_id, f"Invalid Reddit URL.")
     except Exception as e:
         print(f"Error processing URL {reddit_url}: {e}")
         bot.send_message(chat_id, f"Error processing the Reddit URL: {e}")
 
+
+
 def find_reddit_urls(text):
     """
     Finds Reddit URLs in a given text.
-
-    Args:
-        text (str): The text to search for Reddit URLs.
-
-    Returns:
-        list: A list of Reddit URLs found in the text.
     """
     reddit_url_pattern = r"https?://(www\.)?reddit\.com/(r/[a-zA-Z0-9_]+/)?(comments/[a-zA-Z0-9_]+/)?[a-zA-Z0-9_-]+"
     return re.findall(reddit_url_pattern, text)
+
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -105,10 +132,9 @@ def handle_message(message):
     reddit_urls = find_reddit_urls(message.text)
     if reddit_urls:
         for url in reddit_urls:
-            # Use asyncio.run() to bridge the async download_and_send with the sync telebot
             asyncio.run(download_and_send(url, message.chat.id))
-    #  Removed the else condition, as it would send the message for every non-reddit url
-    #  present in any message.
+
+
 
 def main():
     """
@@ -116,16 +142,15 @@ def main():
     """
     try:
         # Create the download directory if it doesn't exist
-        import os
         os.makedirs(DOWNLOAD_PATH, exist_ok=True)
-
         print("Bot started. Listening for messages...")
         bot.polling(none_stop=True)
     except Exception as e:
         print(f"Error starting the bot: {e}")
     finally:
         print("Bot stopped.")
-        downloader.close()  # Ensure the downloader is closed properly.
+
+
 
 if __name__ == "__main__":
     main()
