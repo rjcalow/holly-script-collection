@@ -9,6 +9,7 @@ The below is for the scraping for ai
 '''
 
 blacklist_phrases = [
+    "feedback",
     "cookie policy",
     "privacy policy",
     "use of cookies",
@@ -84,8 +85,9 @@ blacklist_phrases = [
 
 def scrape_article_p_tags(url):
     """
-    Scrapes the text content of an article, focusing on <p> tags,
-    cleans up the text, removes privacy/cookie statements, and limits to 1500 words.
+    Scrapes the text content of an article, prioritizing <article> tags,
+    falls back to <p> tags if <article> is not found, cleans up the text,
+    removes privacy/cookie statements, and limits to 1500 words.
     """
     try:
         response = requests.get(url, timeout=10)
@@ -93,26 +95,29 @@ def scrape_article_p_tags(url):
 
         soup = BeautifulSoup(response.content, "html.parser")
 
-       
-
         # Remove footer and other cookie-related elements
         for tag in soup.find_all(['footer', 'aside', 'nav']):
             tag.decompose()
 
-        for div in soup.find_all('div', class_=re.compile(r'(cookie|privacy|legal)', re.IGNORECASE)):
+        for div in soup.find_all('div', class_=re.compile(r'(cookie|privacy|legal|feedback)', re.IGNORECASE)):
             div.decompose()
 
         # Remove <p> tags with class containing "cookie"
         for p in soup.find_all('p', class_=re.compile(r'cookie', re.IGNORECASE)):
             p.decompose()
 
-        paragraphs = soup.find_all("p")
-        #print(paragraphs)
+        # Try to find <article> tag first
+        article = soup.find("article")
+        if article:
+            content = article.find_all("p")
+        else:
+            # Fallback to all <p> tags if <article> is not found
+            content = soup.find_all("p")
+
         article_text = ""
         word_count = 0
 
-        for p in paragraphs:
-
+        for p in content:
             text = p.get_text(strip=True).lower()
             if any(phrase in text for phrase in blacklist_phrases):
                 continue
@@ -132,13 +137,10 @@ def scrape_article_p_tags(url):
                     break
 
         if not article_text.strip():
-            print(f"Warning: No article text found at {url} within <p> tags.")
+            print(f"Warning: No article text found at {url} within <article> or <p> tags.")
             return None
 
-        # Remove privacy/cookie statements using regex
-        #article_text = remove_privacy_statements(article_text)
-
-        # Truncate to 1500 words after regex cleanup (if necessary)
+        # Truncate to 1500 words after cleanup (if necessary)
         words = article_text.split()
         if len(words) > 1500:
             article_text = " ".join(words[:1500])

@@ -33,7 +33,7 @@ from _secrets import whitelist, hollytoken
 
 import re
 
-from common.ai import ai_on_pi  # ai testing
+from common.ai import ai_simple_task, ai_with_memory  # ai testing
 from common.scraping import scrape_article_p_tags
 
 
@@ -127,7 +127,7 @@ def askAI_handler(message):
     if not check_user(message, bot, chat_id):
         return
     text = " ".join(message.text.split()[1:])  # Get the arguments after /ask
-    reply = ai_on_pi(text)
+    reply = ai_with_memory(chat_id, text)
     bot.send_message(chat_id=chat_id, text=str(reply))
 
 
@@ -152,7 +152,7 @@ def handle_message(message):
         article_text = scrape_article_p_tags(urls[0])
         print(article_text)
         try:
-            response = ai_on_pi(
+            response = ai_simple_task(
                 "Condense the following text into a summary of 350 characters or less, focusing solely on the core content. Remove all privacy, cookie, feedback, and legal statements. Provide the summary text only, without any introductory phrases, headings, or character counts. Text:"
                 + article_text
             )
