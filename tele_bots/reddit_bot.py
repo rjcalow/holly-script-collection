@@ -47,9 +47,6 @@ INSTAGRAM_URL_PATTERN = re.compile(r'(https?://(?:www\.)?instagram\.com/(?:p/\w+
 def handle_message(message):
     urls = REDDIT_URL_PATTERN.findall(message.text)
 
-    if not urls:
-        return
-
     for url in urls:
         #bot.send_message(message.chat.id, f"🔍 Downloading media from Reddit URL:\n{url}")
 
