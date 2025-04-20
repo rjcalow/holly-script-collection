@@ -119,16 +119,16 @@ def uptime(message):
     bot.send_message(chat_id, piuptime(), reply_markup=types.ReplyKeyboardRemove())
     # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
 
-
-@bot.message_handler(commands=["ask"])
-def askAI_handler(message):
-    chat_id = message.chat.id
-    # Assuming check_user function can work with telebot's message object
-    if not check_user(message, bot, chat_id):
-        return
-    text = " ".join(message.text.split()[1:])  # Get the arguments after /ask
-    reply = ai_with_memory(chat_id, text)
-    bot.send_message(chat_id=chat_id, text=str(reply))
+#removed 20/04/25
+# @bot.message_handler(commands=["ask"])
+# def askAI_handler(message):
+#     chat_id = message.chat.id
+#     # Assuming check_user function can work with telebot's message object
+#     if not check_user(message, bot, chat_id):
+#         return
+#     text = " ".join(message.text.split()[1:])  # Get the arguments after /ask
+#     reply = ai_with_memory(chat_id, text)
+#     bot.send_message(chat_id=chat_id, text=str(reply))
 
 
 # Function to find URLs in a message
@@ -138,16 +138,30 @@ def find_urls(text):
     return re.findall(url_pattern, text)
 
 
-# Function to handle incoming messages
-@bot.message_handler(func=lambda message: True)  # Handles all text messages
+#@bot.message_handler(func=lambda message: True)
 def handle_message(message):
-    # Assuming check_user function can work with telebot's message object
     if not check_user(message, bot, message.chat.id):
         return
-    text = message.text  # Get the text of the incoming message
-    urls = find_urls(text)  # Find URLs in the text
-    response = None  # Initialize response to None
 
+    text = message.text or ""
+    chat_id = message.chat.id
+    is_reply_to_bot = (
+        message.reply_to_message and message.reply_to_message.from_user.username == bot.get_me().username
+    )
+    is_mentioning_bot = f"@{bot.get_me().username}" in text
+
+    # Handle AI prompt if the user replied to the bot or mentioned it
+    if is_reply_to_bot or is_mentioning_bot:
+        # Clean up @mention from text if present
+        clean_text = text.replace(f"@{bot.get_me().username}", "").strip()
+
+        if clean_text:
+            reply = ai_with_memory(chat_id, clean_text)
+            bot.reply_to(message, str(reply))
+        return
+
+    # Existing article scraping + summarizing
+    urls = find_urls(text)
     if urls:
         article_text = scrape_article_p_tags(urls[0])
         print(article_text)
@@ -156,17 +170,11 @@ def handle_message(message):
                 "Condense the following text into a summary of 350 characters or less, focusing solely on the core content. Remove all privacy, cookie, feedback, and legal statements. Provide the summary text only, without any introductory phrases, headings, or character counts. Text:"
                 + article_text
             )
-        except:
-            response = None
-    else:
-        response = None
+            if response:
+                bot.reply_to(message, str(response))
+        except Exception as e:
+            print("AI summary error:", e)
 
-    if response:
-        bot.reply_to(
-            message,
-            str(response),
-            # reply_to_message_id=message.message_id # Already handled by reply_to
-        )
 
 
 @bot.message_handler(commands=["restart"])
