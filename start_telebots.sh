@@ -1,72 +1,69 @@
 #!/bin/bash
 
 LOCK_FILE="/tmp/start_telebots.lock"
+THIS_PID=$$
 
-# Check if lock file exists and process inside is running
+# === Kill previous instance if running ===
 if [ -f "$LOCK_FILE" ]; then
-  old_pid=$(cat "$LOCK_FILE")
-  if ps -p "$old_pid" > /dev/null 2>&1; then
-    echo "$(date) - Script already running with PID $old_pid. Killing it..."
-    kill "$old_pid"
+  OLD_PID=$(cat "$LOCK_FILE")
+  if ps -p "$OLD_PID" > /dev/null 2>&1; then
+    echo "$(date) - Previous instance detected (PID: $OLD_PID). Killing it..."
+    kill "$OLD_PID"
     sleep 2
+  else
+    echo "$(date) - Found stale lock file. Proceeding."
   fi
 fi
 
-# Store current PID in lock file
-echo $$ > "$LOCK_FILE"
+# === Save current PID to lock file ===
+echo "$THIS_PID" > "$LOCK_FILE"
 
-# Acquire an exclusive lock on the lock file
-flock -n "$LOCK_FILE" -c '
-  # Check Ollama status and restart/start accordingly
-  if systemctl is-active --quiet ollama; then
-    echo "$(date) - Ollama service is running. Restarting..."
-    sudo systemctl restart ollama
-    if [ $? -eq 0 ]; then
-      echo "$(date) - Ollama service restarted successfully."
-    else
-      echo "$(date) - Failed to restart Ollama service."
-    fi
-  else
-    echo "$(date) - Ollama service is not running. Starting..."
-    sudo systemctl start ollama
-    if [ $? -eq 0 ]; then
-      echo "$(date) - Ollama service started successfully."
-    else
-      echo "$(date) - Failed to start Ollama service."
-    fi
+# === Cleanup on exit ===
+cleanup() {
+  echo "$(date) - Cleaning up lock file."
+  rm -f "$LOCK_FILE"
+}
+trap cleanup EXIT
+
+# === Restart/start Ollama ===
+if systemctl is-active --quiet ollama; then
+  echo "$(date) - Ollama service is running. Restarting..."
+  sudo systemctl restart ollama && echo "$(date) - Ollama restarted." || echo "$(date) - Failed to restart Ollama."
+else
+  echo "$(date) - Ollama service is not running. Starting..."
+  sudo systemctl start ollama && echo "$(date) - Ollama started." || echo "$(date) - Failed to start Ollama."
+fi
+
+sleep 5 # Give Ollama time to (re)start
+
+# === Script config ===
+scripts=('holly.py' 'reddit_bot.py')
+dir_="/home/holly/holly-script-collection/tele_bots"
+python_env="/home/holly/holly_env/bin/python3"
+
+# === Kill existing bot scripts ===
+echo "$(date) - Stopping any existing instances of the scripts..."
+for s in "${scripts[@]}"; do
+  pids=$(pgrep -f "$s")
+  if [ -n "$pids" ]; then
+    echo "Killing $s (PIDs: $pids)"
+    kill $pids
   fi
-  sleep 5 # Give Ollama time to (re)start
+done
+sleep 5
 
-  scripts=('holly.py' 'reddit_bot.py')
-  dir_="/home/holly/holly-script-collection/tele_bots"
-  python_env="/home/holly/holly_env/bin/python3"
-
-  # Kill all running instances of the scripts at the start
-  echo "Stopping any existing instances of the scripts..."
+# === Main loop: keep scripts alive ===
+while true; do
   for s in "${scripts[@]}"; do
-    pids=$(pgrep -f "$s")
-    if [ -n "$pids" ]; then
-      echo "Killing processes for $s (PIDs: $pids)"
-      kill $pids
+    process_id=$(pgrep -f "$s")
+    if [ -n "$process_id" ]; then
+      echo "$(date) - $s is running (PID: $process_id)"
+    else
+      echo "$(date) - $s is not running, starting it..."
+      nohup "$python_env" "$dir_/$s" > "$dir_/${s}.log" 2>&1 &
+      echo "$(date) - $s started, check ${s}.log for output"
+      sleep 1
     fi
   done
-  echo "All existing instances stopped."
-  sleep 5 # Let them shut down
-
-  # Main loop
-  while true; do
-    for s in "${scripts[@]}"; do
-      process_id=$(pgrep -f "$s")
-
-      if [ -n "$process_id" ]; then
-        echo "$(date) - $s is running (PID: $process_id)"
-      else
-        echo "$(date) - $s is not running, starting it..."
-        nohup "$python_env" "$dir_/$s" > "$dir_/${s}.log" 2>&1 &
-        echo "$(date) - $s started, check ${s}.log for output"
-        sleep 1
-      fi
-    done
-    sleep 120
-  done
-'
+  sleep 120
+done
