@@ -137,26 +137,28 @@ def find_urls(text):
     url_pattern = r"(https?://[^\s]+)"
     return re.findall(url_pattern, text)
 
-
-@bot.message_handler(func=lambda message: message.text and f"@{bot.get_me().username}" in message.text)
+@bot.message_handler(func=lambda message: message.text)
 def handle_message(message):
     if not check_user(message, bot, message.chat.id):
         return
 
     text = message.text or ""
     chat_id = message.chat.id
+
+    # Only respond in groups if the bot is explicitly mentioned
+    if message.chat.type in ["group", "supergroup"]:
+        if f"@{bot.get_me().username}" not in text:
+            return
+        # Strip the mention for cleaner AI prompt
+        text = text.replace(f"@{bot.get_me().username}", "").strip()
+
     original_message_text_for_ai = None
 
-    # Check if the message is a reply to the bot
-    # Add the original message text to the prompt
-    # to give AI context
     if message.reply_to_message and message.reply_to_message.from_user.username == bot.get_me().username:
         original_message_text_for_ai = message.reply_to_message.text
         prompt_for_ai = f"You are responding to the following message: '{original_message_text_for_ai}'. The user's reply is: '{text}'."
     else:
-        # Clean up @mention from text if present
-        clean_text = text.replace(f"@{bot.get_me().username}", "").strip()
-        prompt_for_ai = clean_text
+        prompt_for_ai = text
 
     if prompt_for_ai:
         try:
@@ -164,14 +166,12 @@ def handle_message(message):
             bot.reply_to(message, str(reply), parse_mode="Markdown")
         except Exception as e:
             print(f"Error in ai_with_memory: {e}")
-            bot.reply_to(message, "Sorry, there was an error processing your request.", parse_mode="Markdown")
+            #bot.reply_to(message, "Sorry, there was an error processing your request.", parse_mode="Markdown")
         return
 
-    # Existing article scraping + summarizing
     urls = find_urls(text)
     if urls:
         article_text = scrape_article_p_tags(urls[0])
-        print(article_text)
         try:
             response = ai_simple_task(
                 "Condense the following text into a summary of 350 characters or less, focusing solely on the core content. Remove all privacy, cookie, feedback, and legal statements. Provide the summary text only, without any introductory phrases, headings, or character counts. Text:"
@@ -181,6 +181,7 @@ def handle_message(message):
                 bot.reply_to(message, str(response), parse_mode="Markdown")
         except Exception as e:
             print("AI summary error:", e)
+
 
 
 
