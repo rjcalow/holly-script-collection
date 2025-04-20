@@ -39,6 +39,10 @@ REDDIT_URL_PATTERN = re.compile(
     re.IGNORECASE
 )
 
+# --- Regex to match Instagram URLs ---
+INSTAGRAM_URL_PATTERN = re.compile(r'(https?://(?:www\.)?instagram\.com/(?:p/\w+/|reel/\w+/|tv/\w+/))', re.IGNORECASE)
+
+
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
     urls = REDDIT_URL_PATTERN.findall(message.text)
@@ -85,20 +89,22 @@ def handle_message(message):
             print(f"[ERROR] {e}")
             bot.send_message(message.chat.id, f"❌ Error processing the Reddit URL:\n{url}\n{e}")
 
-        if url.startswith('https://www.instagram.com'):
-            try:
-                file = download_instagram_post(url)
-                with open(file, 'rb') as media:
-                    if file.lower().endswith(".mp4"):
-                        bot.send_video(message.chat.id, media, supports_streaming=True, caption="",reply_to_message_id=message.message_id)
-                    elif file.lower().endswith(".jpg"):
-                        bot.send_photo(message.chat.id, media, caption="", reply_to_message_id=message.message_id)
-                
-                # Clean up the downloaded file
-                os.remove(file)
-            except Exception as e:
-                print(f"[ERROR] {e}")
-                #bot.send_message(message.chat.id, f"❌ Error processing the Instagram URL:\n{url}\n{e}")
+    # Process Instagram URLs after Reddit URLs
+    instagram_urls = INSTAGRAM_URL_PATTERN.findall(message.text)
+    for url in instagram_urls:
+        try:
+            file = download_instagram_post(url)
+            with open(file, 'rb') as media:
+                if file.lower().endswith(".mp4"):
+                    bot.send_video(message.chat.id, media, supports_streaming=True, caption="📥", reply_to_message_id=message.message_id)
+                elif file.lower().endswith(".jpg"):
+                    bot.send_photo(message.chat.id, media, caption="📥", reply_to_message_id=message.message_id)
+
+            # Clean up the downloaded file
+            os.remove(file)
+        except Exception as e:
+            print(f"[ERROR] Instagram: {e}")
+            #bot.send_message(message.chat.id, f"❌ Error processing the Instagram URL:\n{url}\n{e}", reply_to_message_id=message.message_id)
 
 if __name__ == "__main__":
     print("🤖 Bot is running...")
