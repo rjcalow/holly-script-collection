@@ -2,6 +2,19 @@
 
 LOCK_FILE="/tmp/start_telebots.lock"
 
+# Check if lock file exists and process inside is running
+if [ -f "$LOCK_FILE" ]; then
+  old_pid=$(cat "$LOCK_FILE")
+  if ps -p "$old_pid" > /dev/null 2>&1; then
+    echo "$(date) - Script already running with PID $old_pid. Killing it..."
+    kill "$old_pid"
+    sleep 2
+  fi
+fi
+
+# Store current PID in lock file
+echo $$ > "$LOCK_FILE"
+
 # Acquire an exclusive lock on the lock file
 flock -n "$LOCK_FILE" -c '
   # Check Ollama status and restart/start accordingly
