@@ -28,6 +28,7 @@ from telebot import types
 from telebot.types import InputMediaPhoto
 import re
 from common.reddit import download_reddit_media
+from common.insta import download_instagram_post
 
 
 bot = telebot.TeleBot(reddittoken)
@@ -83,6 +84,21 @@ def handle_message(message):
         except Exception as e:
             print(f"[ERROR] {e}")
             bot.send_message(message.chat.id, f"❌ Error processing the Reddit URL:\n{url}\n{e}")
+
+        if url.startswith('https://www.instagram.com'):
+            try:
+                file = download_instagram_post(url)
+                with open(file, 'rb') as media:
+                    if file.lower().endswith(".mp4"):
+                        bot.send_video(message.chat.id, media, supports_streaming=True, caption="",reply_to_message_id=message.message_id)
+                    elif file.lower().endswith(".jpg"):
+                        bot.send_photo(message.chat.id, media, caption="", reply_to_message_id=message.message_id)
+                
+                # Clean up the downloaded file
+                os.remove(file)
+            except Exception as e:
+                print(f"[ERROR] {e}")
+                #bot.send_message(message.chat.id, f"❌ Error processing the Instagram URL:\n{url}\n{e}")
 
 if __name__ == "__main__":
     print("🤖 Bot is running...")

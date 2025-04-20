@@ -138,27 +138,38 @@ def find_urls(text):
     return re.findall(url_pattern, text)
 
 
-#@bot.message_handler(func=lambda message: True)
+@bot.message_handler(func=lambda message: True)
 def handle_message(message):
     if not check_user(message, bot, message.chat.id):
         return
 
+    
     text = message.text or ""
     chat_id = message.chat.id
-    is_reply_to_bot = (
-        message.reply_to_message and message.reply_to_message.from_user.username == bot.get_me().username
-    )
-    is_mentioning_bot = f"@{bot.get_me().username}" in text
+    original_message_text_for_ai = None
 
-    # Handle AI prompt if the user replied to the bot or mentioned it
-    if is_reply_to_bot or is_mentioning_bot:
+    # Check if the message is a reply to the bot
+    # add the orginal message text to the prompt
+    # to give ai context 
+    if message.reply_to_message and message.reply_to_message.from_user.username == bot.get_me().username:
+        original_message_text_for_ai = message.reply_to_message.text
+        prompt_for_ai = f"You are responding to the following message: '{original_message_text_for_ai}'. The user's reply is: '{text}'."
+    elif f"@{bot.get_me().username}" in text:
         # Clean up @mention from text if present
         clean_text = text.replace(f"@{bot.get_me().username}", "").strip()
+        prompt_for_ai = clean_text
+    else:
+        prompt_for_ai = text
 
-        if clean_text:
-            reply = ai_with_memory(chat_id, clean_text)
-            bot.reply_to(message, str(reply))
+    if prompt_for_ai:
+        try:
+            reply = ai_with_memory(chat_id, prompt_for_ai)
+            bot.reply_to(message, str(reply), parse_mode="Markdown")
+        except Exception as e:
+            print(f"Error in ai_with_memory: {e}")
+            bot.reply_to(message, "Sorry, there was an error processing your request.", parse_mode="Markdown")
         return
+
 
     # Existing article scraping + summarizing
     urls = find_urls(text)
@@ -171,7 +182,7 @@ def handle_message(message):
                 + article_text
             )
             if response:
-                bot.reply_to(message, str(response))
+                bot.reply_to(message, str(response),parse_mode="Markdown")
         except Exception as e:
             print("AI summary error:", e)
 

@@ -25,16 +25,17 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# === Restart/start Ollama ===
-if systemctl is-active --quiet ollama; then
-  echo "$(date) - Ollama service is running. Restarting..."
-  sudo systemctl restart ollama && echo "$(date) - Ollama restarted." || echo "$(date) - Failed to restart Ollama."
-else
-  echo "$(date) - Ollama service is not running. Starting..."
-  sudo systemctl start ollama && echo "$(date) - Ollama started." || echo "$(date) - Failed to start Ollama."
-fi
+# === this needs work ===
+# # === Restart/start Ollama ===
+# if systemctl is-active --quiet ollama; then
+#   echo "$(date) - Ollama service is running. Restarting..."
+#   sudo systemctl restart ollama && echo "$(date) - Ollama restarted." || echo "$(date) - Failed to restart Ollama."
+# else
+#   echo "$(date) - Ollama service is not running. Starting..."
+#   sudo systemctl start ollama && echo "$(date) - Ollama started." || echo "$(date) - Failed to start Ollama."
+# fi
 
-sleep 5 # Give Ollama time to (re)start
+# sleep 1 # Give Ollama time to (re)start
 
 # === Script config ===
 scripts=('holly.py' 'reddit_bot.py')
