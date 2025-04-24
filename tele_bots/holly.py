@@ -36,6 +36,8 @@ import re
 from common.ai import ai_simple_task, ai_with_memory  # ai testing
 from common.scraping import scrape_article_p_tags
 
+#blacklist for urls
+blacklisturls = ["reddit.com", "instagram.com", "youtube.com", "tiktok.com", "twitter.com"]
 
 bot = telebot.TeleBot(hollytoken)
 
@@ -119,18 +121,6 @@ def uptime(message):
     bot.send_message(chat_id, piuptime(), reply_markup=types.ReplyKeyboardRemove())
     # delete(None, chat_id, message.message_id) # Context is not directly available in telebot
 
-#removed 20/04/25
-# @bot.message_handler(commands=["ask"])
-# def askAI_handler(message):
-#     chat_id = message.chat.id
-#     # Assuming check_user function can work with telebot's message object
-#     if not check_user(message, bot, chat_id):
-#         return
-#     text = " ".join(message.text.split()[1:])  # Get the arguments after /ask
-#     reply = ai_with_memory(chat_id, text)
-#     bot.send_message(chat_id=chat_id, text=str(reply))
-
-
 # Function to find URLs in a message
 def find_urls(text):
     # Regular expression pattern for URLs
@@ -171,6 +161,11 @@ def handle_message(message):
 
     urls = find_urls(text)
     if urls:
+        # Check if the URL is a Reddit or instagram link ect
+        if any(blacklist in urls[0] for blacklist in blacklisturls):
+            #bot.reply_to(message, "Sorry, I can't process that URL.")
+            return
+
         article_text = scrape_article_p_tags(urls[0])
         try:
             response = ai_simple_task(
@@ -181,8 +176,6 @@ def handle_message(message):
                 bot.reply_to(message, str(response), parse_mode="Markdown")
         except Exception as e:
             print("AI summary error:", e)
-
-
 
 
 @bot.message_handler(commands=["restart"])
