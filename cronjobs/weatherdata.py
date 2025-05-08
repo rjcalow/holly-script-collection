@@ -20,7 +20,7 @@ for path in (base_dir, home_dir):
 from _secrets import adafruit_username, adafruit_key
 # --- Adafruit backend --- 
 from common.adafruit_sync import configure, sync_feeds, check_feed_freshness
-from common.telegram import telegram_msg 
+from common.telegram_msg import send_telegram_alert
 
 # --- Adafruit IO Config ---
 configure(
