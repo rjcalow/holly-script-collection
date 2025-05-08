@@ -5,6 +5,7 @@ downloads data from Adafruit IO feeds and appends it to CSV files.
 import requests
 import csv
 import os
+from datetime import datetime, timezone, timedelta
 
 # Globals (set via configure)
 HEADERS = {}
@@ -69,3 +70,29 @@ def sync_feeds(feed_list, folder="feeds"):
         print(f"\nSyncing feed: {feed}")
         data = fetch_feed_data(feed)
         append_new_data_to_csv(feed, data, folder=folder)
+
+
+# --- for checking feed health ---
+def check_feed_freshness(feed_key, folder="feeds", max_age_hours=2):
+    filepath = os.path.join(folder, f"{feed_key}.csv")
+    if not os.path.exists(filepath):
+        print(f"⚠️ No data file for {feed_key}")
+        return False
+
+    with open(filepath, "r") as f:
+        lines = [line.strip() for line in f if line.strip()]
+        if not lines:
+            print(f"⚠️ Empty file for {feed_key}")
+            return False
+        last_line = lines[-1]
+        timestamp_str = last_line.split("\t")[0]
+
+    try:
+        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        now = datetime.now(timezone.utc)
+        delta = now - dt
+        print(f"{feed_key} last updated {delta} ago")
+        return delta <= timedelta(hours=max_age_hours)
+    except Exception as e:
+        print(f"⚠️ Failed to parse timestamp for {feed_key}: {e}")
+        return False
