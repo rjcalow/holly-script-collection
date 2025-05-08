@@ -1,7 +1,9 @@
 '''
 Downloads weather data from Adafruit IO with common.adafruit_sync
 '''
+# --- secrets ---
 import os
+import sys
 # Get the absolute path to the directory containing holly.py
 script_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(script_dir)
