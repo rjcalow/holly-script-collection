@@ -85,10 +85,10 @@ def check_feed_freshness(feed_key, folder="feeds", max_age_hours=2):
             print(f"⚠️ Empty file for {feed_key}")
             return False
         last_line = lines[-1]
-        timestamp_str = last_line.split("\t")[0]
+        timestamp_str = last_line.split(",")[0]  # ← Fix 
 
     try:
-        dt = datetime.fromisoformat(timestamp_str.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(timestamp_str)
         now = datetime.now(timezone.utc)
         delta = now - dt
         print(f"{feed_key} last updated {delta} ago")
@@ -96,3 +96,4 @@ def check_feed_freshness(feed_key, folder="feeds", max_age_hours=2):
     except Exception as e:
         print(f"⚠️ Failed to parse timestamp for {feed_key}: {e}")
         return False
+
