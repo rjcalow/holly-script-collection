@@ -147,12 +147,15 @@ def download_reddit_media(reddit_url):
 
 def resolve_reddit_url(url):
     try:
-        response = requests.head(url, allow_redirects=True, timeout=10)
-        return response.url
+        response = requests.get(url, allow_redirects=True, timeout=10)
+        final_url = response.url
+        # Reddit may return the main subreddit page if link is invalid or already resolved
+        if "reddit.com/r/" in final_url and "comments" in final_url:
+            return final_url
+        return final_url  # might still work with download_reddit_media
     except Exception as e:
         print(f"[ERROR] Failed to resolve URL: {url} -> {e}")
         return url  # Fallback to original
-
         
 # Example test (uncomment to run standalone)
 # if __name__ == "__main__":

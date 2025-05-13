@@ -35,7 +35,7 @@ bot = telebot.TeleBot(reddittoken)
 
 # --- Regex to match Reddit URLs including short links, gallery, and comments ---
 REDDIT_URL_PATTERN = re.compile(
-    r'(https?://(?:www\.)?(?:reddit\.com/(?:r/\w+/(?:comments/\w+/\S+)?|gallery/\w+|s/\w+)|redd\.it/\w+))',
+    r'(https?://(?:www\.)?(?:reddit\.com/(?:r/\w+/(?:comments/\w+(?:/\S+)?|s/\w+)?|gallery/\w+)|redd\.it/\w+))',
     re.IGNORECASE
 )
 
