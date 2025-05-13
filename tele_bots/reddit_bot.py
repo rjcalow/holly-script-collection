@@ -27,7 +27,7 @@ import telebot
 from telebot import types
 from telebot.types import InputMediaPhoto
 import re
-from common.reddit import download_reddit_media
+from common.reddit import download_reddit_media, resolve_reddit_url
 from common.insta import download_instagram_post
 
 
@@ -35,7 +35,7 @@ bot = telebot.TeleBot(reddittoken)
 
 # --- Regex to match Reddit URLs including short links, gallery, and comments ---
 REDDIT_URL_PATTERN = re.compile(
-    r'(https?://(?:www\.)?(?:reddit\.com/r/\w+/(?:comments/\w+/\S+)?|reddit\.com/gallery/\w+|redd\.it/\w+))',
+    r'(https?://(?:www\.)?(?:reddit\.com/(?:r/\w+/(?:comments/\w+/\S+)?|gallery/\w+|s/\w+)|redd\.it/\w+))',
     re.IGNORECASE
 )
 
@@ -51,14 +51,15 @@ def handle_message(message):
         #bot.send_message(message.chat.id, f"🔍 Downloading media from Reddit URL:\n{url}")
 
         try:
-            result = download_reddit_media(url)
+            resolved_url = resolve_reddit_url(url)
+            result = download_reddit_media(resolved_url)
             media_files = result.get("files", [])
             metadata = result.get("metadata", {})
             caption = f"📥 *{metadata.get('title', 'Untitled')}*\n🔗 [Reddit Post]({metadata.get('permalink')})"
             caption = caption[:1024]  # Telegram caption limit
 
             if not media_files:
-                bot.send_message(message.chat.id, "⚠️ No media found to download.")
+                #bot.send_message(message.chat.id, "⚠️ No media found to download.")
                 continue
 
             # If it's a gallery (multiple images), send as media group
@@ -84,7 +85,7 @@ def handle_message(message):
 
         except Exception as e:
             print(f"[ERROR] {e}")
-            bot.send_message(message.chat.id, f"❌ Error processing the Reddit URL:\n{url}\n{e}")
+            #bot.send_message(message.chat.id, f"❌ Error processing the Reddit URL:\n{url}\n{e}")
 
     # Process Instagram URLs after Reddit URLs
     instagram_urls = INSTAGRAM_URL_PATTERN.findall(message.text)

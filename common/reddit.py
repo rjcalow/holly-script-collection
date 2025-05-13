@@ -144,6 +144,16 @@ def download_reddit_media(reddit_url):
         "metadata": post_metadata
     }
 
+
+def resolve_reddit_url(url):
+    try:
+        response = requests.head(url, allow_redirects=True, timeout=10)
+        return response.url
+    except Exception as e:
+        print(f"[ERROR] Failed to resolve URL: {url} -> {e}")
+        return url  # Fallback to original
+
+        
 # Example test (uncomment to run standalone)
 # if __name__ == "__main__":
 #     url = "https://www.reddit.com/r/interestingasfuck/comments/1bx4i6y/how_pov_videos_are_filmed/"
