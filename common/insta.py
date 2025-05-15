@@ -2,21 +2,32 @@ import instaloader, re, os
 
 L = instaloader.Instaloader()
 
-def find_mp4_video(folder_path):
-  """
-  Finds the path of the first MP4 video file encountered in the given folder.
+def find_media_files(folder_path):
+    """
+    Searches for media files in the specified folder.
 
-  Args:
-    folder_path: The path to the folder to search.
+    Returns:
+        - The path to the first .mp4 file found, if any.
+        - Otherwise, a list of all .jpg file paths.
+        - Returns None if no .mp4 or .jpg files are found.
+    """
+    mp4_path = None
+    jpg_paths = []
 
-  Returns:
-    The full path to the MP4 video file, or None if no MP4 video is found.
-  """
-  for root, dirs, files in os.walk(folder_path):
-    for file in files:
-      if file.lower().endswith(".mp4") or file.lower().endswith(".jpg"):
-        return os.path.join(root, file)
-  return None
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if file.lower().endswith(".mp4") and not mp4_path:
+                mp4_path = file_path
+            elif file.lower().endswith(".jpg"):
+                jpg_paths.append(file_path)
+
+    if mp4_path:
+        return mp4_path
+    elif jpg_paths:
+        return jpg_paths
+    else:
+        return None
 
 def get_shortcode_from_url(url):
     match = re.search(r'/(p|reel|tv)/([A-Za-z0-9_-]+)/', url)
@@ -41,9 +52,9 @@ def download_instagram_post(url):
             post = instaloader.Post.from_shortcode(L.context, shortcode)
             L.download_post(post, target="downloads")
             print("Post Downloaded")
-            video = find_mp4_video("/home/holly/downloads")
-            if video:
-                return video
+            media = find_media_files("/home/holly/downloads")
+            if media:
+                return media
 
         except Exception as e:
             print(f"An error occurred: {e}")

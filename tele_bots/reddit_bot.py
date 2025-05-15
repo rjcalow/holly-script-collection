@@ -89,20 +89,68 @@ def handle_message(message):
 
     # Process Instagram URLs after Reddit URLs
     instagram_urls = INSTAGRAM_URL_PATTERN.findall(message.text)
+
     for url in instagram_urls:
         try:
-            file = download_instagram_post(url)
-            with open(file, 'rb') as media:
-                if file.lower().endswith(".mp4"):
-                    bot.send_video(message.chat.id, media, supports_streaming=True, caption="📥", reply_to_message_id=message.message_id)
-                elif file.lower().endswith(".jpg"):
-                    bot.send_photo(message.chat.id, media, caption="📥", reply_to_message_id=message.message_id)
+            media_result = download_instagram_post(url)
 
-            # Clean up the downloaded file
-            os.remove(file)
+            if isinstance(media_result, str) and media_result.lower().endswith(".mp4"):
+                # Send single video
+                with open(media_result, 'rb') as media:
+                    bot.send_video(
+                        message.chat.id,
+                        media,
+                        supports_streaming=True,
+                        caption="📥",
+                        reply_to_message_id=message.message_id
+                    )
+                os.remove(media_result)
+
+            elif isinstance(media_result, list):
+                if len(media_result) == 1:
+                    # Single JPG — send as photo
+                    jpg_file = media_result[0]
+                    with open(jpg_file, 'rb') as img:
+                        bot.send_photo(
+                            message.chat.id,
+                            img,
+                            caption="📥",
+                            reply_to_message_id=message.message_id
+                        )
+                    os.remove(jpg_file)
+                elif len(media_result) > 1:
+                    # Multiple JPGs — send as media group
+                    media_group = []
+                    file_refs = []
+
+                    for jpg_file in media_result:
+                        try:
+                            img = open(jpg_file, 'rb')
+                            file_refs.append(img)  # Keep reference to avoid GC
+                            media_group.append({'type': 'photo', 'media': img})
+                        except Exception as img_error:
+                            print(f"[WARN] Failed to open image: {jpg_file} — {img_error}")
+
+                    if media_group:
+                        bot.send_media_group(
+                            message.chat.id,
+                            media_group,
+                            reply_to_message_id=message.message_id
+                        )
+
+                    # Cleanup
+                    for jpg_file in media_result:
+                        try:
+                            os.remove(jpg_file)
+                        except Exception as cleanup_error:
+                            print(f"[WARN] Failed to delete {jpg_file}: {cleanup_error}")
+
+                    for ref in file_refs:
+                        ref.close()
+
         except Exception as e:
             print(f"[ERROR] Instagram: {e}")
-            #bot.send_message(message.chat.id, f"❌ Error processing the Instagram URL:\n{url}\n{e}", reply_to_message_id=message.message_id)
+            # bot.send_message(message.chat.id, f"❌ Error processing the Instagram URL:\n{url}\n{e}", reply_to_message_id=message.message_id)
 
 if __name__ == "__main__":
     print("🤖 Bot is running...")
