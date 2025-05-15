@@ -1,3 +1,8 @@
+'''
+
+This module handles downloading Instagram posts using Instaloader.
+
+'''
 import instaloader
 import re
 import os

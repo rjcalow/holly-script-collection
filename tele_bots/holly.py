@@ -33,7 +33,8 @@ from _secrets import whitelist, hollytoken
 
 import re
 
-from common.ai import ai_simple_task, ai_with_memory  # ai testing
+#from common.local_ai_handler import ai_simple_task, ai_with_memory  # local testing
+from common.openai_handler import ai_simple_task, ai_with_memory
 from common.scraping import scrape_article_p_tags
 
 #blacklist for urls
