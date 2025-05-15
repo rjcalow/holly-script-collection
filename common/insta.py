@@ -1,6 +1,16 @@
-import instaloader, re, os
+import instaloader
+import re
+import os
+import shutil
+import logging
 
-L = instaloader.Instaloader()
+# Setup logging
+logging.basicConfig(
+    filename='/home/holly/errorlog.txt',
+    filemode='a',
+    format='[%(asctime)s] [%(levelname)s] %(message)s',
+    level=logging.INFO
+)
 
 def find_media_files(folder_path):
     """
@@ -29,34 +39,56 @@ def find_media_files(folder_path):
     else:
         return None
 
-def get_shortcode_from_url(url):
-    match = re.search(r'/(p|reel|tv)/([A-Za-z0-9_-]+)/', url)
+
+
+def get_shortcode_from_url(url_string):
+    """
+    Extracts the shortcode from an Instagram URL string.
+    This function now *expects* a string URL, as the calling logic
+    (INSTAGRAM_URL_PATTERN in reddit_bot.py) ensures a full URL string is passed.
+    """
+    if not isinstance(url_string, str):
+        logging.error(f"get_shortcode_from_url received non-string URL as input: {type(url_string)} - {url_string}")
+        return None
+
+    # This regex specifically extracts the shortcode part from a full URL string
+    match = re.search(r'/(p|reel|tv)/([A-Za-z0-9_-]+)', url_string)
     if match:
         return match.group(2)
+    logging.warning(f"No Instagram shortcode found in URL string: {url_string}")
     return None
-
+    
 def download_instagram_post(url):
-    L = instaloader.Instaloader(
-    download_videos=True,
-    download_video_thumbnails=False,
-    download_comments=False,
-    save_metadata=False,
-    post_metadata_txt_pattern=''
-    )
+    target_dir = "instagram_temp_files"
+    
 
+    # Clean previous downloads
+    if os.path.exists(target_dir):
+        try:
+            shutil.rmtree(target_dir)
+            logging.info("Cleared previous Instagram download directory.")
+        except Exception as cleanup_error:
+            logging.warning(f"Failed to clear directory: {target_dir} — {cleanup_error}")
+    os.makedirs(target_dir, exist_ok=True)
 
     shortcode = get_shortcode_from_url(url)
-    
-    if shortcode:
-        try:
-            post = instaloader.Post.from_shortcode(L.context, shortcode)
-            L.download_post(post, target="downloads")
-            print("Post Downloaded")
-            media = find_media_files("/home/holly/downloads")
-            if media:
-                return media
+    if not shortcode:
+        logging.error(f"Invalid Instagram URL or shortcode not found: {url}")
+        return None
 
-        except Exception as e:
-            print(f"An error occurred: {e}")
-    else:
-        print("Invalid URL or could not extract shortcode.")
+    try:
+        L = instaloader.Instaloader(
+            download_videos=True,
+            download_video_thumbnails=False,
+            download_comments=False,
+            save_metadata=False,
+            post_metadata_txt_pattern=''
+        )
+        post = instaloader.Post.from_shortcode(L.context, shortcode)
+        L.download_post(post, target=target_dir)
+        logging.info(f"Successfully downloaded post: {shortcode}")
+        media = find_media_files("/home/holly/" + target_dir)
+        return media if media else None
+    except Exception as e:
+        logging.exception(f"Error downloading Instagram post ({shortcode}): {e}")
+        return None

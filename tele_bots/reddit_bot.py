@@ -1,5 +1,6 @@
 import sys
 import os
+import logging
 
 # Get the absolute path to the directory containing holly.py
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -38,10 +39,11 @@ REDDIT_URL_PATTERN = re.compile(
     r'(https?://(?:www\.)?(?:reddit\.com/(?:r/\w+/(?:comments/\w+(?:/\S+)?|s/\w+)?|gallery/\w+)|redd\.it/\w+))',
     re.IGNORECASE
 )
-
-# --- Regex to match Instagram URLs ---
-INSTAGRAM_URL_PATTERN = re.compile(r'(https?://(?:www\.)?instagram\.com/(?:p/\w+/|reel/\w+/|tv/\w+/))', re.IGNORECASE)
-
+# --- Regex to match Instagram URLs and capture the entire URL string ---
+INSTAGRAM_URL_PATTERN = re.compile(
+    r'(https?://(?:www\.)?instagram\.com/(?:p|reel|tv)/[A-Za-z0-9_-]+(?:/?|\?.*)?)',
+    re.IGNORECASE
+)
 
 @bot.message_handler(func=lambda message: True)
 def handle_message(message):
@@ -88,69 +90,81 @@ def handle_message(message):
             #bot.send_message(message.chat.id, f"❌ Error processing the Reddit URL:\n{url}\n{e}")
 
     # Process Instagram URLs after Reddit URLs
-    instagram_urls = INSTAGRAM_URL_PATTERN.findall(message.text)
+    try:
+        instagram_urls = INSTAGRAM_URL_PATTERN.findall(message.text)
 
-    for url in instagram_urls:
-        try:
-            media_result = download_instagram_post(url)
+        for url in instagram_urls:
+            try:
+                media_result = download_instagram_post(url)
 
-            if isinstance(media_result, str) and media_result.lower().endswith(".mp4"):
-                # Send single video
-                with open(media_result, 'rb') as media:
-                    bot.send_video(
-                        message.chat.id,
-                        media,
-                        supports_streaming=True,
-                        caption="📥",
-                        reply_to_message_id=message.message_id
-                    )
-                os.remove(media_result)
-
-            elif isinstance(media_result, list):
-                if len(media_result) == 1:
-                    # Single JPG — send as photo
-                    jpg_file = media_result[0]
-                    with open(jpg_file, 'rb') as img:
-                        bot.send_photo(
+                if isinstance(media_result, str) and media_result.lower().endswith(".mp4"):
+                    # Send single video
+                    with open(media_result, 'rb') as media:
+                        bot.send_video(
                             message.chat.id,
-                            img,
+                            media,
+                            supports_streaming=True,
                             caption="📥",
                             reply_to_message_id=message.message_id
                         )
-                    os.remove(jpg_file)
-                elif len(media_result) > 1:
-                    # Multiple JPGs — send as media group
-                    media_group = []
-                    file_refs = []
+                    os.remove(media_result)
 
-                    for jpg_file in media_result:
+                elif isinstance(media_result, list):
+                    # Filter only valid image paths
+                    media_files = [f for f in media_result if os.path.exists(f) and os.path.splitext(f)[1].lower() in ['.jpg', '.jpeg', '.png']]
+
+                    if len(media_files) == 1:
+                        jpg_file = media_files[0]
                         try:
-                            img = open(jpg_file, 'rb')
-                            file_refs.append(img)  # Keep reference to avoid GC
-                            media_group.append({'type': 'photo', 'media': img})
-                        except Exception as img_error:
-                            print(f"[WARN] Failed to open image: {jpg_file} — {img_error}")
-
-                    if media_group:
-                        bot.send_media_group(
-                            message.chat.id,
-                            media_group,
-                            reply_to_message_id=message.message_id
-                        )
-
-                    # Cleanup
-                    for jpg_file in media_result:
-                        try:
+                            with open(jpg_file, 'rb') as img:
+                                bot.send_photo(
+                                    message.chat.id,
+                                    img,
+                                    caption="📥",
+                                    reply_to_message_id=message.message_id
+                                )
                             os.remove(jpg_file)
-                        except Exception as cleanup_error:
-                            print(f"[WARN] Failed to delete {jpg_file}: {cleanup_error}")
+                            logging.info(f"Sent and removed image: {jpg_file}")
+                        except Exception as send_error:
+                            logging.exception(f"[TELEGRAM ERROR] Failed to send photo: {jpg_file}")
 
-                    for ref in file_refs:
-                        ref.close()
+                    elif len(media_files) > 1:
+                        media_group = []
+                        for i, file_path in enumerate(media_files):
+                            try:
+                                with open(file_path, 'rb') as f:
+                                    media = types.InputMediaPhoto(
+                                        f.read(),
+                                        caption="📥" if i == 0 else None,
+                                        parse_mode="Markdown"
+                                    )
+                                    media_group.append(media)
+                            except Exception as e:
+                                logging.warning(f"Failed to read image file for media group: {file_path} — {e}")
 
-        except Exception as e:
-            print(f"[ERROR] Instagram: {e}")
-            # bot.send_message(message.chat.id, f"❌ Error processing the Instagram URL:\n{url}\n{e}", reply_to_message_id=message.message_id)
+                        try:
+                            if media_group:
+                                bot.send_media_group(
+                                    message.chat.id,
+                                    media_group,
+                                    reply_to_message_id=message.message_id
+                                )
+                                logging.info("Sent media group")
+                        except Exception as send_error:
+                            logging.exception("[TELEGRAM ERROR] Failed to send media group.")
+
+                        # Cleanup
+                        for jpg_file in media_files:
+                            try:
+                                os.remove(jpg_file)
+                            except Exception as cleanup_error:
+                                logging.warning(f"Failed to delete file: {jpg_file} — {cleanup_error}")
+
+            except Exception as e:
+                logging.exception(f"[ERROR] Instagram: {e}")
+    except Exception as outer_error:
+        logging.exception(f"[ERROR] Outer handler failure: {outer_error}")
+
 
 if __name__ == "__main__":
     print("🤖 Bot is running...")
