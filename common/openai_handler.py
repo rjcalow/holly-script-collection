@@ -1,41 +1,53 @@
-'''
+"""
+ChatGPT API Handler
+"""
 
-ChagptGPT API Handler
-
-
-'''
-
-from openai import OpenAI
-import sys
 import os
+import sys
+import logging
+from openai import OpenAI
 
-# Get the absolute path to the directory containing holly.py
+# --- Set up paths ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
 base_dir = os.path.dirname(script_dir)
-common_dir = os.path.join(base_dir, "common")
 home_dir = os.path.expanduser("~")
 
+# Add base and home to sys.path for module resolution
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+if home_dir not in sys.path:
+    sys.path.insert(0, home_dir)
+
+# --- Logging ---
+log_file = "/home/holly/errorlog.txt"
+logging.basicConfig(
+    filename=log_file,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
 # --- Secrets ---
-from _secrets import chatgpt_key
+try:
+    from _secrets import chatgpt_key
+except Exception as e:
+    logging.error(f"Failed to import secrets: {e}")
+    raise
 
-
-# Initialize OpenAI client with API key from environment
+# --- Initialize OpenAI client ---
 client = OpenAI(api_key=chatgpt_key)
 
 # In-memory conversation store per user
 conversation_memory = {}
 
-def ai_with_memory(user_id, query, model="gpt-4"):
+def ai_with_memory(user_id, query, model="gpt-3.5-turbo"):
     """
     Handles conversation with memory for a specific user/session using OpenAI SDK v1+.
     """
     if user_id not in conversation_memory:
-        # You can customize the assistant's persona using a system prompt
         conversation_memory[user_id] = [
             {"role": "system", "content": "You are a helpful and concise AI assistant."}
         ]
 
-    # Add the user's message
     conversation_memory[user_id].append({"role": "user", "content": query})
 
     try:
@@ -45,18 +57,16 @@ def ai_with_memory(user_id, query, model="gpt-4"):
             temperature=0.7,
         )
         ai_reply = response.choices[0].message.content.strip()
-
-        # Add AI's response to the conversation memory
         conversation_memory[user_id].append({"role": "assistant", "content": ai_reply})
-
+        logging.info(f"Response to user {user_id}: {ai_reply}")
         return ai_reply
 
     except Exception as e:
-        print(f"Error querying OpenAI: {e}")
+        logging.error(f"Error querying OpenAI for user {user_id}: {e}")
         return None
 
 
-def ai_simple_task(prompt, model="gpt-4"):
+def ai_simple_task(prompt, model="gpt-3.5-turbo"):
     """
     Handles one-off tasks or summarization using OpenAI SDK v1+.
     """
@@ -66,10 +76,14 @@ def ai_simple_task(prompt, model="gpt-4"):
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
         )
-        return response.choices[0].message.content.strip()
+        ai_reply = response.choices[0].message.content.strip()
+        logging.info(f"Simple task response: {ai_reply}")
+        return ai_reply
 
     except Exception as e:
-        print(f"Error querying OpenAI: {e}")
+        logging.error(f"Error querying OpenAI (simple task): {e}")
         return None
 
 
+if __name__ == "__main__":
+    print(ai_simple_task("What is the capital of France?"))
