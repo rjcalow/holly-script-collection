@@ -1,5 +1,10 @@
 """
+
 ChatGPT API Handler
+Devoid, but left here for future?
+Using local ai handler for now.
+16/5/2025
+
 """
 
 import os
