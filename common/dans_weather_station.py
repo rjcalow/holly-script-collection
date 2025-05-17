@@ -17,8 +17,6 @@ from _secrets import (
 # Other imports
 import paho.mqtt.client as mqtt
 import json
-from datetime import datetime
-import time
 import threading
 import logging
 
@@ -43,37 +41,46 @@ def fetch_weather_station_data(timeout=10):
     data = None
     data_received = threading.Event()
 
-    def on_connect(client, userdata, flags, reasonCode, properties=None):
+    # --- Callback using API v5 ---
+    def on_connect(client, userdata, flags, reasonCode, properties):
         if reasonCode == mqtt.ReasonCodes.SUCCESS:
-            logging.info("Connected to MQTT Broker")
+            logging.info("Connected to MQTT Broker successfully.")
             client.subscribe(dans_weather_station_topic1)
             client.subscribe(dans_weather_station_topic2)
         else:
-            logging.error(f"Failed to connect, reason code: {reasonCode}")
+            logging.error(f"Failed to connect to MQTT broker. Reason code: {reasonCode}")
 
     def on_message(client, userdata, msg):
         nonlocal data
         try:
-            data = json.loads(msg.payload.decode('utf-8'))
+            decoded = msg.payload.decode("utf-8")
+            data = json.loads(decoded)
+            logging.info(f"Received data from topic {msg.topic}: {decoded}")
             data_received.set()
         except Exception as e:
-            logging.error(f"Error decoding message: {e}")
+            logging.error(f"Failed to decode MQTT message: {e}")
 
-    mqtt_client = mqtt.Client(client_id="", protocol=mqtt.MQTTv311)
+    # --- MQTT client setup ---
+    mqtt_client = mqtt.Client(
+        client_id="",
+        protocol=mqtt.MQTTv311,
+        transport="tcp",
+        callback_api_version=5  # <- This silences the deprecation warning
+    )
     mqtt_client.username_pw_set(dans_weather_station_username, dans_weather_station_password)
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
 
     try:
-        mqtt_client.connect(dans_weather_station_address, 1883, 60)
+        mqtt_client.connect(dans_weather_station_address, port=1883, keepalive=60)
         mqtt_client.loop_start()
 
         if not data_received.wait(timeout=timeout):
-            logging.warning("Timeout: No data received from the weather station.")
+            logging.warning("Timeout waiting for MQTT message.")
             return {}
 
     except Exception as e:
-        logging.error(f"Failed to connect to MQTT broker: {e}")
+        logging.error(f"MQTT connection error: {e}")
         return {}
 
     finally:
@@ -82,7 +89,7 @@ def fetch_weather_station_data(timeout=10):
 
     return data
 
-# For testing
+# --- For testing ---
 if __name__ == "__main__":
-    data = fetch_weather_station_data()
-    print(data)
+    result = fetch_weather_station_data()
+    print(json.dumps(result, indent=2) if result else "No data received.")
