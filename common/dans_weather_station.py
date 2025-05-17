@@ -1,13 +1,12 @@
-'''
-
+"""
 Dans Weather Station
-contect to the MQTT broker and fetch the weather station data
+Connect to the MQTT broker and fetch the weather station data
+"""
 
-'''
-#initialise the path
+# Initialise the path
 import path_setup
 
-#keys and secrets
+# Keys and secrets
 from _secrets import (
     dans_weather_station_address,
     dans_weather_station_username,
@@ -15,7 +14,7 @@ from _secrets import (
     dans_weather_station_topic1,
     dans_weather_station_topic2)
 
-#other imports
+# Other imports
 import paho.mqtt.client as mqtt
 import json
 from datetime import datetime
@@ -31,22 +30,26 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-
 def fetch_weather_station_data(timeout=10):
     """
     Fetches weather station data from the MQTT broker.
-    
+
     Args:
         timeout: The maximum time (in seconds) to wait for data.
-    
+
     Returns:
         The weather station data as a dictionary, or an empty dictionary if no data is received.
     """
     data = None
     data_received = threading.Event()
 
-    def on_connect(client, userdata, flags, rc):
-        logging.info("Connected to MQTT Broker")
+    def on_connect(client, userdata, flags, reasonCode, properties=None):
+        if reasonCode == mqtt.ReasonCodes.SUCCESS:
+            logging.info("Connected to MQTT Broker")
+            client.subscribe(dans_weather_station_topic1)
+            client.subscribe(dans_weather_station_topic2)
+        else:
+            logging.error(f"Failed to connect, reason code: {reasonCode}")
 
     def on_message(client, userdata, msg):
         nonlocal data
@@ -56,17 +59,13 @@ def fetch_weather_station_data(timeout=10):
         except Exception as e:
             logging.error(f"Error decoding message: {e}")
 
-    mqtt_client = mqtt.Client()
+    mqtt_client = mqtt.Client(client_id="", protocol=mqtt.MQTTv311)
     mqtt_client.username_pw_set(dans_weather_station_username, dans_weather_station_password)
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
 
     try:
         mqtt_client.connect(dans_weather_station_address, 1883, 60)
-        topics = [dans_weather_station_topic1, dans_weather_station_topic2]
-        for topic in topics:
-            mqtt_client.subscribe(topic)
-        
         mqtt_client.loop_start()
 
         if not data_received.wait(timeout=timeout):
@@ -83,6 +82,7 @@ def fetch_weather_station_data(timeout=10):
 
     return data
 
-#for testing
-data = fetch_weather_station_data()
-print(data)
+# For testing
+if __name__ == "__main__":
+    data = fetch_weather_station_data()
+    print(data)
