@@ -30,7 +30,7 @@ configure(
     limit=1000
 )
 
-feeds = ["temperature", "pressure", "humidity"]
+feeds = ["temperature", "pressure", "humidity", "water-level"]
 folder = "/home/holly/weatherdata"
 max_age_hours = 2
 
