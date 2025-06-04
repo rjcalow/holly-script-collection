@@ -3,8 +3,19 @@ Dans Weather Station
 Connect to the MQTT broker and fetch the weather station data
 """
 
-# Initialise the path
-import path_setup
+import sys
+import os
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.dirname(script_dir)
+common_dir = os.path.join(base_dir, "common")
+home_dir = os.path.expanduser("~")
+
+# Add paths to sys.path
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+if home_dir not in sys.path:
+    sys.path.insert(0, home_dir)
+
 
 # Keys and secrets
 from _secrets import (
@@ -16,6 +27,7 @@ from _secrets import (
 
 # Other imports
 import paho.mqtt.client as mqtt
+from paho.mqtt.client import CallbackAPIVersion # Correctly imported now
 import json
 import threading
 import logging
@@ -42,13 +54,17 @@ def fetch_weather_station_data(timeout=10):
     data_received = threading.Event()
 
     # --- Callback using API v5 ---
+    # Note: For CallbackAPIVersion.VERSION2 (or 5), the on_connect signature includes 'properties'
     def on_connect(client, userdata, flags, reasonCode, properties):
-        if reasonCode == mqtt.ReasonCodes.SUCCESS:
+        # The reasonCode here is an integer (0 for success when using CallbackAPIVersion.VERSION2)
+        if reasonCode == 0: # <-- CORRECTED THIS LINE
             logging.info("Connected to MQTT Broker successfully.")
             client.subscribe(dans_weather_station_topic1)
             client.subscribe(dans_weather_station_topic2)
         else:
             logging.error(f"Failed to connect to MQTT broker. Reason code: {reasonCode}")
+            # Ensure the event is set on connection failure too, to unblock wait()
+            data_received.set()
 
     def on_message(client, userdata, msg):
         nonlocal data
@@ -65,31 +81,42 @@ def fetch_weather_station_data(timeout=10):
         client_id="",
         protocol=mqtt.MQTTv311,
         transport="tcp",
-        callback_api_version=5  # <- This silences the deprecation warning
+        callback_api_version=CallbackAPIVersion.VERSION2 # Using the enum member now
     )
     mqtt_client.username_pw_set(dans_weather_station_username, dans_weather_station_password)
     mqtt_client.on_connect = on_connect
     mqtt_client.on_message = on_message
 
     try:
+        logging.info(f"Attempting to connect to {dans_weather_station_address}")
         mqtt_client.connect(dans_weather_station_address, port=1883, keepalive=60)
         mqtt_client.loop_start()
 
+        logging.info(f"Waiting for data (timeout: {timeout}s)...")
         if not data_received.wait(timeout=timeout):
             logging.warning("Timeout waiting for MQTT message.")
             return {}
+        else:
+             # If data_received was set, data variable should hold the received data
+             if data is None:
+                  logging.warning("Data received event set, but no data was assigned.")
+                  return {}
 
     except Exception as e:
         logging.error(f"MQTT connection error: {e}")
         return {}
 
     finally:
+        logging.info("Stopping MQTT loop and disconnecting.")
         mqtt_client.loop_stop()
         mqtt_client.disconnect()
+        logging.info("MQTT client disconnected.")
 
     return data
 
 # --- For testing ---
 if __name__ == "__main__":
+    logging.info("--- Starting weather data fetch test ---")
     result = fetch_weather_station_data()
     print(json.dumps(result, indent=2) if result else "No data received.")
+    logging.info("--- Test finished ---")

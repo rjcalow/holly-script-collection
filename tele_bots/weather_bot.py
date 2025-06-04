@@ -4,30 +4,220 @@ Fetches data from Dans Weather Station and creates a weather report.
 """
 
 # Initialise the path (if path_setup is needed for dans_weather_station import)
-import sys
-import os
 import time # For tracking call timestamps
 from datetime import datetime, timedelta
 import pytz # For timezone handling in timestamp formatting
 
-# Add the directory containing dans_weather_station.py to sys.path if it's not in the same directory
-# This assumes dans_weather_station.py is in the 'common' directory relative to this script's parent.
-# Adjust if your structure is different.
-script_dir = os.path.dirname(__file__)
-project_root = os.path.abspath(os.path.join(script_dir, '..')) 
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+
+import sys
+import os
+
+# Get the absolute path to the directory containing holly.py
+script_dir = os.path.dirname(os.path.abspath(__file__))
+# script_dir will be: /home/holly/holly-script-collection/telebots
+
+# Go up one level to 'holly-script-collection'
+base_dir = os.path.dirname(script_dir)
+# base_dir will be: /home/holly/holly-script-collection
+
+# Construct the path to the 'common' directory
+common_dir = os.path.join(base_dir, "common")
+
+# Get the user's home directory
+home_dir = os.path.expanduser("~")
+
+# Add 'holly-script-collection' and the home directory to sys.path
+# Adding at the beginning prioritizes these locations
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+if home_dir not in sys.path:"""
+Telegram Weather Bot
+Fetches data from Dan's Weather Station and sends a weather report.
+"""
+
+import sys
+from pathlib import Path
+import logging
+from datetime import datetime, timedelta
+import pytz
+import json
+import re
+import argparse
+import telebot
+
+# --- Path Setup ---
+script_dir = Path(__file__).resolve().parent
+base_dir = script_dir.parent
+common_dir = base_dir / "common"
+home_dir = Path.home()
+
+sys.path.insert(0, str(base_dir))
+sys.path.insert(0, str(home_dir))
+
+# --- Imports ---
+from _secrets import weather_bot_token
+from common.dans_weather_station import fetch_weather_station_data
+
+# --- Logging ---
+log_file = str(home_dir / "errorlog.txt")
+logging.basicConfig(
+    filename=log_file,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+# --- Bot Initialization ---
+bot = telebot.TeleBot(weather_bot_token)
+logging.info("Telegram Bot initialized.")
+
+# --- Rate Limiting ---
+MAX_CALLS_PER_WINDOW = 5
+RESET_INTERVAL_SECONDS = 20 * 60  # 20 minutes
+user_call_tracker = {}
+
+def check_rate_limit(chat_id):
+    now = datetime.now()
+    tracker = user_call_tracker.setdefault(chat_id, {'calls': [], 'locked_until': None})
+
+    if tracker['locked_until'] and now < tracker['locked_until']:
+        remaining = tracker['locked_until'] - now
+        return False, f"⏳ Too many requests. Try again in {remaining.seconds // 60} min."
+
+    tracker['calls'] = [ts for ts in tracker['calls'] if now - ts < timedelta(seconds=RESET_INTERVAL_SECONDS)]
+    tracker['calls'].append(now)
+
+    if len(tracker['calls']) > MAX_CALLS_PER_WINDOW:
+        tracker['locked_until'] = now + timedelta(seconds=RESET_INTERVAL_SECONDS)
+        return False, "🚫 Rate limit exceeded. Please try again later."
+
+    return True, None
+
+def escape_markdown(text):
+    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', str(text))
+
+# --- Command Handlers ---
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    bot.reply_to(
+        message,
+        "🌤️ *Welcome to the Weather Bot!*\nSend `/weather` to get the latest report.",
+        parse_mode='MarkdownV2'
+    )
+
+@bot.message_handler(commands=['weather'])
+def get_weather_report(message):
+    chat_id = message.chat.id
+    allowed, info = check_rate_limit(chat_id)
+
+    if not allowed:
+        bot.send_message(chat_id, escape_markdown(info), parse_mode='MarkdownV2')
+        logging.warning(f"User {chat_id} is rate-limited: {info}")
+        return
+
+    bot.send_message(chat_id, "📡 Fetching weather data... please wait.")
+    logging.info(f"Received /weather from {chat_id}")
+
+    weather_data = fetch_weather_station_data(timeout=20)
+
+    if weather_data:
+        logging.info(f"Weather data fetched for {chat_id}")
+        report = format_weather_report(weather_data)
+        bot.send_message(chat_id, escape_markdown(report), parse_mode='MarkdownV2')
+    else:
+        logging.error(f"No weather data received for {chat_id}")
+        bot.send_message(chat_id, escape_markdown(
+            "⚠️ Sorry, I couldn't retrieve the weather data. Please try again later."
+        ), parse_mode='MarkdownV2')
+
+# --- Helpers ---
+
+def format_weather_report(data):
+    if not data:
+        return "No data to report."
+
+    report = ["*📋 Dan's Weather Station Report*"]
+
+    nickname = data.get('nickname', 'N/A')
+    model = data.get('model', 'N/A')
+    uid = data.get('uid', 'N/A')
+    timestamp_str = data.get('timestamp', 'N/A')
+
+    report.append(f"\n📡 Station: {nickname} ({model})")
+    report.append(f"🆔 UID: {uid}")
+
+    if timestamp_str != 'N/A':
+        try:
+            dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+            local_dt = dt.astimezone(pytz.timezone('Europe/London'))
+            report.append(f"🕒 Last Updated: {local_dt.strftime('%A, %d %B %Y %H:%M:%S %Z')}")
+        except Exception as e:
+            logging.error(f"Timestamp parse failed: {e}")
+            report.append(f"🕒 Last Updated (UTC): {timestamp_str}")
+
+    readings = data.get('readings', {})
+    report.append("\n🌦️ *Current Conditions:*")
+
+    if (temp := readings.get('temperature')) is not None:
+        report.append(f"🌡️ Temperature: `{temp:.1f}°C`")
+
+    if (humidity := readings.get('humidity')) is not None:
+        report.append(f"💧 Humidity: `{humidity:.1f}%`")
+
+    if (pressure := readings.get('pressure')) is not None:
+        report.append(f"🌬️ Pressure: `{pressure:.2f} hPa`")
+
+    wind_speed = readings.get('wind_speed')
+    wind_dir = readings.get('wind_direction')
+    if wind_speed is not None and wind_dir is not None:
+        dir_cardinal = get_cardinal_direction(wind_dir)
+        report.append(f"💨 Wind: `{wind_speed:.1f} m/s` from `{dir_cardinal} ({wind_dir}°)`")
+    elif wind_speed is not None:
+        report.append(f"💨 Wind Speed: `{wind_speed:.1f} m/s`")
+
+    if (rain := readings.get('rain')) is not None:
+        report.append(f"☔ Total Rain: `{rain:.2f} mm`")
+
+    if (rain_rate := readings.get('rain_per_second')) is not None:
+        report.append(f"💦 Rain Rate: `{rain_rate:.3f} mm/s`")
+
+    if (lux := readings.get('luminance')) is not None:
+        report.append(f"💡 Luminance: `{lux:.1f} lux`")
+
+    return "\n".join(report)
+
+def get_cardinal_direction(degrees):
+    directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE",
+                  "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"]
+    degrees %= 360
+    return directions[int((degrees + 11.25) / 22.5) % 16]
+
+# --- Entry Point ---
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--test', action='store_true', help="Run in test mode (no bot)")
+    args = parser.parse_args()
+
+    if args.test:
+        data = fetch_weather_station_data()
+        print(json.dumps(data, indent=2) if data else "No data received.")
+    else:
+        logging.info("Bot polling started.")
+        try:
+            bot.polling(non_stop=True, interval=0, timeout=20)
+        except Exception as e:
+            logging.critical(f"Bot crashed: {e}")
+
+    sys.path.insert(0, home_dir)
 
 # Keys and secrets
 from _secrets import weather_bot_token
 
 # Import your weather station data fetcher
 # Make sure dans_weather_station.py is accessible via sys.path or in the same folder
-try:
-    from common.dans_weather_station import fetch_weather_station_data
-except ImportError:
-    # Fallback if 'common' prefix is not used in your path setup
-    from dans_weather_station import fetch_weather_station_data
+
+from common.dans_weather_station import fetch_weather_station_data
 
 # Other imports
 import telebot
@@ -35,7 +225,7 @@ import logging
 import json # For pretty printing received data during debug
 
 # --- Logging ---
-log_file = "/home/holly/telegram_bot_error.log" # Dedicated log for the bot
+log_file = "/home/holly/errorlog.txt" # Dedicated log for the bot
 logging.basicConfig(
     filename=log_file,
     level=logging.INFO,
