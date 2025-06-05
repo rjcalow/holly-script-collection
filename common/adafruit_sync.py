@@ -1,5 +1,11 @@
 '''
-downloads data from Adafruit IO feeds and appends it to CSV files.
+adafruit_sync.py
+
+========
+Downloads data from Adafruit IO feeds and appends it to CSV files.
+
+Also provides a string report for Telegram with the latest feed data.
+========
 
 '''
 import requests
@@ -96,4 +102,70 @@ def check_feed_freshness(feed_key, folder="feeds", max_age_hours=2):
     except Exception as e:
         print(f"⚠️ Failed to parse timestamp for {feed_key}: {e}")
         return False
+
+
+def format_feed_report_telegram(feeds=None, tz_name="Europe/London"):
+    """
+    Drop in function for Telegram bot integration.
+    Returns a MarkdownV2-formatted report of specified Adafruit IO feeds.
+
+    Args:
+        feeds (list[str]): List of feed names to include. Defaults to common weather feeds.
+        tz_name (str): Timezone name for formatting timestamps.
+
+    Returns:
+        str: Telegram-safe MarkdownV2 weather report string.
+    """
+    import pytz
+    import re
+    from datetime import datetime
+
+    def escape(text):
+        return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', str(text))
+
+    def fmt_time(iso_string):
+        try:
+            dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+            return dt.astimezone(pytz.timezone(tz_name)).strftime('%H\\:%M')
+        except Exception:
+            return "unknown"
+
+    configure()
+    feeds = feeds or ["temperature", "humidity", "pressure", "water-level"]
+    symbols = {
+        "temperature": "🌡️",
+        "humidity": "💧",
+        "pressure": "🌬️",
+        "water-level": "🌊"
+    }
+
+    lines = ["*📡 Adafruit Weather Station*"]
+    success = False
+
+    for feed in feeds:
+        try:
+            data = fetch_feed_data(feed)
+            if not data:
+                lines.append(f"{symbols.get(feed, '❓')} `{feed}`: no data")
+                continue
+            v = float(data[0]["value"])
+            t = fmt_time(data[0].get("created_at", ""))
+            if feed == "temperature":
+                lines.append(f"{symbols[feed]} Temperature: `{v:.1f}°C` _(at {t})_")
+            elif feed == "humidity":
+                lines.append(f"{symbols[feed]} Humidity: `{v:.1f}%`")
+            elif feed == "pressure":
+                lines.append(f"{symbols[feed]} Pressure: `{v:.2f} hPa`")
+            elif feed == "water-level":
+                lines.append(f"{symbols[feed]} Water Level: `{v:.2f} cm`")
+            else:
+                lines.append(f"{symbols.get(feed, '🔹')} {feed}: `{v}`")
+            success = True
+        except Exception as e:
+            lines.append(f"{symbols.get(feed, '❓')} `{feed}`: error reading data")
+    
+    if not success:
+        return escape("⚠️ No data available from Adafruit IO at this time.")
+
+    return "\n".join(escape(line) for line in lines)
 

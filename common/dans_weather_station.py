@@ -31,6 +31,8 @@ from paho.mqtt.client import CallbackAPIVersion # Correctly imported now
 import json
 import threading
 import logging
+import re
+from datetime import datetime
 
 # --- Logging ---
 log_file = "/home/holly/errorlog.txt"
@@ -113,6 +115,64 @@ def fetch_weather_station_data(timeout=10):
         logging.info("MQTT client disconnected.")
 
     return data
+
+
+
+
+def escape_telegram(text):
+    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', str(text))
+
+def format_dans_weather_report_telegram(data=None, tz="UTC"):
+    """
+    Formats Dan's Weather Station data into a Telegram MarkdownV2 string.
+
+    Args:
+        data (dict, optional): The weather data dictionary. If None, fetches it.
+        tz (str): Timezone string for local time formatting (currently unused).
+
+    Returns:
+        str: MarkdownV2-formatted weather report string.
+    """
+    if data is None:
+        data = fetch_weather_station_data()
+
+    if not data:
+        return escape_telegram("⚠️ No data received from Dan's Weather Station.")
+
+    lines = ["*🌦️ Dan's Weather Station*"]
+
+    # Extract and format values
+    temperature = data.get("temperature_c")
+    humidity = data.get("humidity")
+    pressure = data.get("pressure")
+    wind_speed = data.get("wind_speed")
+    wind_direction = data.get("wind_direction")
+    rainfall = data.get("rainfall")
+    timestamp = data.get("timestamp")
+
+    def safe_line(label, value, unit=""):
+        if value is not None:
+            return f"{label}: `{value} {unit}`".strip()
+        return None
+
+    lines.append(safe_line("🌡️ Temperature", temperature, "°C"))
+    lines.append(safe_line("💧 Humidity", humidity, "%"))
+    lines.append(safe_line("🌬️ Pressure", pressure, "hPa"))
+    lines.append(safe_line("🍃 Wind Speed", wind_speed, "m/s"))
+    lines.append(safe_line("🧭 Wind Dir", wind_direction, "°"))
+    lines.append(safe_line("🌧️ Rainfall", rainfall, "mm"))
+
+    if timestamp:
+        try:
+            dt = datetime.fromisoformat(timestamp)
+            lines.append(f"_Last updated at {dt.strftime('%H\\:%M')} UTC_")
+        except Exception:
+            pass
+
+    return "\n".join(escape_telegram(line) for line in lines if line)
+
+
+
 
 # --- For testing ---
 if __name__ == "__main__":
