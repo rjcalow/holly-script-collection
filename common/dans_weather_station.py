@@ -33,6 +33,7 @@ import threading
 import logging
 import re
 from datetime import datetime
+import pytz
 
 # --- Logging ---
 log_file = "/home/holly/errorlog.txt"
@@ -117,60 +118,56 @@ def fetch_weather_station_data(timeout=10):
     return data
 
 
+from datetime import datetime
 
-
-def escape_telegram(text):
-    return re.sub(r'([_*\[\]()~`>#+\-=|{}.!])', r'\\\1', str(text))
-
-def format_dans_weather_report_telegram(data=None, tz="UTC"):
+def dans_weather_station_html(data=None):
     """
-    Formats Dan's Weather Station data into a Telegram MarkdownV2 string.
+    Formats Dan's Weather Station data into HTML for Telegram.
 
     Args:
         data (dict, optional): The weather data dictionary. If None, fetches it.
-        tz (str): Timezone string for local time formatting (currently unused).
 
     Returns:
-        str: MarkdownV2-formatted weather report string.
+        str: HTML-formatted weather report string.
     """
+    from common.dans_weather_station import fetch_weather_station_data
+
     if data is None:
         data = fetch_weather_station_data()
 
     if not data:
-        return escape_telegram("⚠️ No data received from Dan's Weather Station.")
+        return "<i>⚠️ No data received from Dan's Weather Station.</i>"
 
-    lines = ["*🌦️ Dan's Weather Station*"]
+    readings = data.get("readings", {})
+    if not readings:
+        return "<i>⚠️ No 'readings' data found.</i>"
 
-    # Extract and format values
-    temperature = data.get("temperature_c")
-    humidity = data.get("humidity")
-    pressure = data.get("pressure")
-    wind_speed = data.get("wind_speed")
-    wind_direction = data.get("wind_direction")
-    rainfall = data.get("rainfall")
-    timestamp = data.get("timestamp")
+    lines = ["<b>🌦️ Dan's Weather Station</b>"]
 
     def safe_line(label, value, unit=""):
         if value is not None:
-            return f"{label}: `{value} {unit}`".strip()
+            return f"{label}: <code>{value} {unit}</code>"
         return None
 
-    lines.append(safe_line("🌡️ Temperature", temperature, "°C"))
-    lines.append(safe_line("💧 Humidity", humidity, "%"))
-    lines.append(safe_line("🌬️ Pressure", pressure, "hPa"))
-    lines.append(safe_line("🍃 Wind Speed", wind_speed, "m/s"))
-    lines.append(safe_line("🧭 Wind Dir", wind_direction, "°"))
-    lines.append(safe_line("🌧️ Rainfall", rainfall, "mm"))
+    # Build lines
+    lines.append(safe_line("🌡️ Temperature", readings.get("temperature"), "°C"))
+    lines.append(safe_line("💧 Humidity", readings.get("humidity"), "%"))
+    lines.append(safe_line("🌬️ Pressure", readings.get("pressure"), "hPa"))
+    lines.append(safe_line("🍃 Wind Speed", readings.get("wind_speed"), "m/s"))
+    lines.append(safe_line("🧭 Wind Dir", readings.get("wind_direction"), "°"))
+    lines.append(safe_line("🌧️ Rainfall", readings.get("rain"), "mm"))
+    lines.append(safe_line("💡 Luminance", readings.get("luminance"), "lux"))
 
+    timestamp = data.get("timestamp")
     if timestamp:
         try:
-            dt = datetime.fromisoformat(timestamp)
-            lines.append(f"_Last updated at {dt.strftime('%H\\:%M')} UTC_")
-        except Exception:
-            pass
+            dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+            gmt_dt = dt.astimezone(pytz.timezone("GMT"))
+            lines.append(f"<i>Last updated at {gmt_dt.strftime('%H:%M')} GMT</i>")
+        except Exception as e:
+            logging.error(f"Failed to parse timestamp: {e}")
 
-    return "\n".join(escape_telegram(line) for line in lines if line)
-
+    return "\n".join(line for line in lines if line)
 
 
 
