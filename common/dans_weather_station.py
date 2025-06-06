@@ -34,6 +34,8 @@ import logging
 import re
 from datetime import datetime
 import pytz
+import uuid
+
 
 # --- Logging ---
 log_file = "/home/holly/errorlog.txt"
@@ -56,22 +58,22 @@ def fetch_weather_station_data(timeout=10):
     data = None
     data_received = threading.Event()
 
-    # --- Callback using API v5 ---
-    # Note: For CallbackAPIVersion.VERSION2 (or 5), the on_connect signature includes 'properties'
     def on_connect(client, userdata, flags, reasonCode, properties):
-        # The reasonCode here is an integer (0 for success when using CallbackAPIVersion.VERSION2)
-        if reasonCode == 0: # <-- CORRECTED THIS LINE
+        if reasonCode == 0:
             logging.info("Connected to MQTT Broker successfully.")
             client.subscribe(dans_weather_station_topic1)
             client.subscribe(dans_weather_station_topic2)
         else:
             logging.error(f"Failed to connect to MQTT broker. Reason code: {reasonCode}")
-            # Ensure the event is set on connection failure too, to unblock wait()
             data_received.set()
 
     def on_message(client, userdata, msg):
         nonlocal data
         try:
+            # Ignore retained messages
+            if msg.retain:
+                logging.info(f"Ignoring retained message from topic {msg.topic}")
+                return
             decoded = msg.payload.decode("utf-8")
             data = json.loads(decoded)
             logging.info(f"Received data from topic {msg.topic}: {decoded}")
@@ -81,7 +83,7 @@ def fetch_weather_station_data(timeout=10):
 
     # --- MQTT client setup ---
     mqtt_client = mqtt.Client(
-        client_id="",
+        client_id=str(uuid.uuid4()),
         protocol=mqtt.MQTTv311,
         transport="tcp",
         callback_api_version=CallbackAPIVersion.VERSION2 # Using the enum member now

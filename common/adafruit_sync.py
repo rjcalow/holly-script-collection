@@ -184,7 +184,7 @@ def ricardos_weather_station_html(feeds=None, tz_name="Europe/London"):
     if latest_timestamp:
         try:
             dt = datetime.fromisoformat(latest_timestamp.replace('Z', '+00:00'))
-            lines.append(f"<i>Last updated at {dt.astimezone(pytz.timezone(tz_name)).strftime('%H:%M')} {tz_name}</i>")
+            lines.append(f"<i>Last updated at {dt.astimezone(pytz.timezone(tz_name)).strftime('%H:%M')} GMT</i>")
         except Exception:
             pass
 
