@@ -33,7 +33,7 @@ from common.dans_weather_station import dans_weather_station_html
 from common.adafruit_sync import ricardos_weather_station_html
 
 # --- Logging ---
-log_file = "/home/holly/weather_bot_log.txt"
+log_file = "/home/holly/errorlog.txt"
 logging.basicConfig(
     filename=log_file,
     level=logging.INFO,

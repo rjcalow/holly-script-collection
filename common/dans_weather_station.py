@@ -120,7 +120,7 @@ def fetch_weather_station_data(timeout=10):
 
 from datetime import datetime
 
-def dans_weather_station_html(data=None):
+def dans_weather_station_html():
     """
     Formats Dan's Weather Station data into HTML for Telegram.
 
@@ -130,10 +130,8 @@ def dans_weather_station_html(data=None):
     Returns:
         str: HTML-formatted weather report string.
     """
-    from common.dans_weather_station import fetch_weather_station_data
 
-    if data is None:
-        data = fetch_weather_station_data()
+    data = fetch_weather_station_data() 
 
     if not data:
         return "<i>⚠️ No data received from Dan's Weather Station.</i>"
