@@ -7,8 +7,15 @@ base_dir = os.path.dirname(script_dir)
 common_dir = os.path.join(base_dir, "common")
 home_dir = os.path.expanduser("~")
 
+# Add paths to sys.path
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+if home_dir not in sys.path:
+    sys.path.insert(0, home_dir)
+    
 # --- Secrets ---
 from _secrets import flickrkey, flickrsecret
+
 
 import flickrapi
 
