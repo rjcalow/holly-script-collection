@@ -1,7 +1,23 @@
 # daily_scheduler.py
 import os
 import yaml
-from flickr_uploader import upload_to_flickr
+
+# --- secrets ---
+import os
+import sys
+
+# Get the absolute path to the directory containing this script
+script_dir = os.path.dirname(os.path.abspath(__file__))
+base_dir = os.path.dirname(script_dir)
+common_dir = os.path.join(base_dir, "cronjobs")
+home_dir = os.path.expanduser("~")
+
+# Add paths to sys.path
+for path in (base_dir, home_dir):
+    if path not in sys.path:
+        sys.path.insert(0, path)
+
+from common.flickr_uploader import upload_to_flickr
 
 # Folder where images and YAMLs are stored
 WATCH_FOLDER = "/home/holly/flickr_uploads"
