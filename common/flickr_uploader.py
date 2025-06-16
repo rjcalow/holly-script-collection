@@ -10,6 +10,8 @@ home_dir = os.path.expanduser("~")
 # --- Secrets ---
 from _secrets import flickrkey, flickrsecret
 
+import flickrapi
+
 # Set token cache location
 TOKEN_CACHE = os.path.expanduser("~/.flickr_token")
 
