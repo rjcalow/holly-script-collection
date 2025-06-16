@@ -10,18 +10,20 @@ home_dir = os.path.expanduser("~")
 # --- Secrets ---
 from _secrets import flickrkey, flickrsecret
 
+# Set token cache location
+TOKEN_CACHE = os.path.expanduser("~/.flickr_token")
 
-# flickr_uploader.py
-import flickrapi
-
-# === Replace with your Flickr API credentials ===
-FLICKR_API_KEY = flickrkey
-FLICKR_API_SECRET = flickrsecret
+# Create Flickr API object with token cache
+flickr = flickrapi.FlickrAPI(
+    flickrkey,
+    flickrsecret,
+    format='parsed-json',
+    token_cache_location=TOKEN_CACHE
+)
 
 def upload_to_flickr(image_path, title="", tags=""):
-    flickr = flickrapi.FlickrAPI(FLICKR_API_KEY, FLICKR_API_SECRET, format='parsed-json')
-    
     if not flickr.token_valid(perms='write'):
+        print("Authorizing Flickr...")  # Run manually once
         flickr.get_request_token(oauth_callback='oob')
         authorize_url = flickr.auth_url(perms='write')
         print(f"Go to this URL to authorize: {authorize_url}")
