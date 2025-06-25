@@ -56,13 +56,16 @@ def run_daily_upload():
         image_path, yaml_path, metadata = selected
         title = metadata.get('title', '')
         tags = metadata.get('tags', '')
-        upload_to_flickr(image_path, title, tags)
+        description = metadata.get('description', '')
+
+        upload_to_flickr(image_path, title, tags, description)
 
         os.remove(image_path)
         os.remove(yaml_path)
-        print(f"Uploaded and removed: {image_path}, {yaml_path}")
+        print(f"✅ Uploaded and removed: {image_path}, {yaml_path}")
     else:
         print("No valid image to upload.")
 
 if __name__ == "__main__":
     run_daily_upload()
+

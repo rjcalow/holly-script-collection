@@ -30,16 +30,47 @@ flickr = flickrapi.FlickrAPI(
     token_cache_location=TOKEN_CACHE
 )
 
-def upload_to_flickr(image_path, title="", tags=""):
+def upload_to_flickr(image_path, title="", tags="", description=""):
+    # Ensure tags is a string, even if passed as a list
+    if isinstance(tags, list):
+        tags = " ".join(tags)
+
     if not flickr.token_valid(perms='write'):
-        print("Authorizing Flickr...")  # Run manually once
+        print("🔐 Authorizing Flickr (first run only)...")
         flickr.get_request_token(oauth_callback='oob')
         authorize_url = flickr.auth_url(perms='write')
-        print(f"Go to this URL to authorize: {authorize_url}")
-        verifier = input("Enter the verifier code: ")
+        print(f"🔗 Go to this URL to authorize: {authorize_url}")
+        verifier = input("🔑 Enter the verifier code: ")
         flickr.get_access_token(verifier)
+        print("✅ Authorization complete and token saved.")
 
-    print(f"Uploading {image_path}...")
-    response = flickr.upload(filename=image_path, title=title, tags=tags)
-    print("Upload complete.")
-    return response
+    print(f"📤 Uploading: {image_path}...")
+
+    try:
+        response = flickr.upload(
+            filename=image_path,
+            title=title,
+            tags=tags,
+            description=description
+        )
+        print("✅ Upload complete.")
+        return response
+    except Exception as e:
+        print("❌ Upload failed:", e)
+        return None
+
+
+
+# def upload_to_flickr(image_path, title="", tags=""):
+#     if not flickr.token_valid(perms='write'):
+#         print("Authorizing Flickr...")  # Run manually once
+#         flickr.get_request_token(oauth_callback='oob')
+#         authorize_url = flickr.auth_url(perms='write')
+#         print(f"Go to this URL to authorize: {authorize_url}")
+#         verifier = input("Enter the verifier code: ")
+#         flickr.get_access_token(verifier)
+
+#     print(f"Uploading {image_path}...")
+#     response = flickr.upload(filename=image_path, title=title, tags=tags)
+#     print("Upload complete.")
+#     return response
