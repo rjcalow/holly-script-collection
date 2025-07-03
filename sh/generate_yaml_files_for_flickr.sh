@@ -1,33 +1,38 @@
 #!/bin/bash
 
-# This script generates YAML files for images in a specified folder.
-
-# Folder containing the images
 WATCH_FOLDER="/home/holly/flickr_uploads"
-
-# Supported image extensions (case insensitive)
-shopt -s nocaseglob
 cd "$WATCH_FOLDER" || exit 1
 
 for img in *.jpg *.jpeg *.png; do
-    # Skip if no match
     [ -e "$img" ] || continue
 
-    # Get base name without extension
     base="${img%.*}"
     yaml="${base}.yaml"
 
-    # Skip if YAML already exists
     if [ -f "$yaml" ]; then
         echo "Skipping existing YAML: $yaml"
         continue
     fi
 
-    # Create YAML with default placeholders
+    # Extract EXIF metadata
+    make=$(exiftool -s3 -Make "$img")
+    model=$(exiftool -s3 -Model "$img")
+    lens=$(exiftool -s3 -LensModel "$img")
+    iso=$(exiftool -s3 -ISO "$img")
+    focal=$(exiftool -s3 -FocalLength "$img")
+    date=$(exiftool -s3 -DateTimeOriginal "$img")
+
+    # Fallbacks
+    [ -z "$make" ] && make="UnknownMake"
+    [ -z "$model" ] && model="UnknownModel"
+
+    # Compose tag list
+    tags="[$(printf '"%s", ' "$make" "$model" "$lens" "$iso" "$focal" "$date" | sed 's/, $//')]"
+
     cat <<EOF > "$yaml"
 title: "${base//_/ }"
-tags: ["example", "tag"]
-description: "Write a description for $img"
+tags: $tags
+description: "Photo taken with $make $model, lens: $lens, ISO: $iso, focal length: $focal"
 priority: 1
 EOF
 
