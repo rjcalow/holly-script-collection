@@ -3,7 +3,7 @@
 WATCH_FOLDER="/home/holly/flickr_uploads"
 cd "$WATCH_FOLDER" || exit 1
 
-for img in *.jpg *.jpeg *.JPG; do
+for img in *.jpg *.jpeg *.png; do
     [ -e "$img" ] || continue
 
     base="${img%.*}"
@@ -18,21 +18,26 @@ for img in *.jpg *.jpeg *.JPG; do
     make=$(exiftool -s3 -Make "$img")
     model=$(exiftool -s3 -Model "$img")
     lens=$(exiftool -s3 -LensModel "$img")
-    iso=$(exiftool -s3 -ISO "$img")
     focal=$(exiftool -s3 -FocalLength "$img")
-    date=$(exiftool -s3 -DateTimeOriginal "$img")
+    fstop=$(exiftool -s3 -FNumber "$img")
+    description=$(exiftool -s3 -ImageDescription "$img")
 
-    # Fallbacks
+    # Clean fallbacks
     [ -z "$make" ] && make="UnknownMake"
     [ -z "$model" ] && model="UnknownModel"
+    [ -z "$lens" ] && lens="UnknownLens"
+    [ -z "$focal" ] && focal="UnknownFocal"
+    [ -z "$fstop" ] && fstop="UnknownFStop"
+    [ -z "$description" ] && description="No description in EXIF"
 
-    # Compose tag list
-    tags="[$(printf '"%s", ' "$make" "$model" "$lens" "$iso" "$focal" "$date" | sed 's/, $//')]"
+    # Format tags list
+    tags="[$(printf '"%s", ' "$make" "$model" "$lens" "$focal" "f/$fstop" | sed 's/, $//')]"
 
+    # Write YAML
     cat <<EOF > "$yaml"
 title: "${base//_/ }"
 tags: $tags
-description: "Photo taken with $make $model, lens: $lens, ISO: $iso, focal length: $focal"
+description: "$description"
 priority: 1
 EOF
 
