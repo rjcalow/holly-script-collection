@@ -3,7 +3,7 @@
 WATCH_FOLDER="/home/holly/flickr_uploads"
 cd "$WATCH_FOLDER" || exit 1
 
-for img in *.jpg *.jpeg *.png; do
+for img in *.jpg *.jpeg *.JPG; do
     [ -e "$img" ] || continue
 
     base="${img%.*}"
