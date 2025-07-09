@@ -3,7 +3,7 @@
 WATCH_FOLDER="/home/holly/flickr_uploads"
 cd "$WATCH_FOLDER" || exit 1
 
-for img in *.jpg *.jpeg *.png; do
+for img in *.jpg *.jpeg *.JPG; do
     [ -e "$img" ] || continue
 
     base="${img%.*}"
@@ -30,8 +30,15 @@ for img in *.jpg *.jpeg *.png; do
     [ -z "$fstop" ] && fstop="UnknownFStop"
     [ -z "$description" ] && description="No description in EXIF"
 
-    # Format tags list
-    tags="[$(printf '"%s", ' "$make" "$model" "$lens" "$focal" "f/$fstop" | sed 's/, $//')]"
+    # --- Custom Tag Mapping ---
+    tags=""
+    if [[ "$make" == "OLYMPUS IMAGING CORP." && "$model" == "C70Z,C7000Z" ]]; then
+        tags='["olympus", "c70", "olympus c70", "c70z", "c7000z", "compact digital camera", "digicam", "ccd sensor", "snapshot", "point and shoot","ccd", "digital", "vsco"]'
+        
+    else
+        # Default tag list
+        tags="[$(printf '"%s", ' "$make" "$model" "$lens" "$focal" "f/$fstop" | sed 's/, $//')]"
+    fi
 
     # Write YAML
     cat <<EOF > "$yaml"
