@@ -3,6 +3,17 @@
 WATCH_FOLDER="/home/holly/flickr_uploads"
 cd "$WATCH_FOLDER" || exit 1
 
+# Convert passed arguments to tag format
+if [ "$#" -gt 0 ]; then
+    custom_tags="["
+    for tag in "$@"; do
+        custom_tags+="\"$tag\", "
+    done
+    custom_tags="${custom_tags%, }]"  # remove trailing comma and space
+else
+    custom_tags=""
+fi
+
 for img in *.jpg *.jpeg *.JPG; do
     [ -e "$img" ] || continue
 
@@ -30,13 +41,12 @@ for img in *.jpg *.jpeg *.JPG; do
     [ -z "$fstop" ] && fstop="UnknownFStop"
     [ -z "$description" ] && description="No description in EXIF"
 
-    # --- Custom Tag Mapping ---
-    tags=""
-    if [[ "$make" == "OLYMPUS IMAGING CORP." && "$model" == "C70Z,C7000Z" ]]; then
-        tags='["olympus", "c70", "olympus c70", "c70z", "c7000z", "compact digital camera", "digicam", "ccd sensor", "snapshot", "point and shoot","ccd", "digital", "vsco"]'
-        
+    # Determine tags
+    if [ -n "$custom_tags" ]; then
+        tags="$custom_tags"
+    elif [[ "$make" == "OLYMPUS IMAGING CORP." && "$model" == "C70Z,C7000Z" ]]; then
+        tags='["olympus", "c70", "olympus c70", "c70z", "c7000z", "compact digital camera", "digicam", "ccd sensor", "snapshot", "point and shoot", "ccd", "digital", "vsco"]'
     else
-        # Default tag list
         tags="[$(printf '"%s", ' "$make" "$model" "$lens" "$focal" "f/$fstop" | sed 's/, $//')]"
     fi
 
