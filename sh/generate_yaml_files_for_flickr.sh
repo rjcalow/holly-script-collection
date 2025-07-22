@@ -3,16 +3,35 @@
 WATCH_FOLDER="/home/holly/flickr_uploads"
 cd "$WATCH_FOLDER" || exit 1
 
-# Convert passed arguments to tag format
-if [ "$#" -gt 0 ]; then
-    custom_tags="["
-    for tag in "$@"; do
-        custom_tags+="\"$tag\", "
-    done
-    custom_tags="${custom_tags%, }]"  # remove trailing comma and space
-else
-    custom_tags=""
-fi
+custom_tags=""
+custom_description=""
+collecting_tags=false
+
+# Parse CLI arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --tags)
+            collecting_tags=true
+            custom_tags="["
+            shift
+            while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+                custom_tags+="\"$1\", "
+                shift
+            done
+            custom_tags="${custom_tags%, }]"  # remove trailing comma and space
+            collecting_tags=false
+            ;;
+        --description)
+            shift
+            custom_description="$1"
+            shift
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            shift
+            ;;
+    esac
+done
 
 for img in *.jpg *.jpeg *.JPG; do
     [ -e "$img" ] || continue
@@ -31,17 +50,24 @@ for img in *.jpg *.jpeg *.JPG; do
     lens=$(exiftool -s3 -LensModel "$img")
     focal=$(exiftool -s3 -FocalLength "$img")
     fstop=$(exiftool -s3 -FNumber "$img")
-    description=$(exiftool -s3 -ImageDescription "$img")
+    exif_description=$(exiftool -s3 -ImageDescription "$img")
 
-    # Clean fallbacks
+    # Fallbacks
     [ -z "$make" ] && make="UnknownMake"
     [ -z "$model" ] && model="UnknownModel"
     [ -z "$lens" ] && lens="UnknownLens"
     [ -z "$focal" ] && focal="UnknownFocal"
     [ -z "$fstop" ] && fstop="UnknownFStop"
-    [ -z "$description" ] && description="No description in EXIF"
+    [ -z "$exif_description" ] && exif_description="No description in EXIF"
 
-    # Determine tags
+    # Use user description if provided
+    if [ -n "$custom_description" ]; then
+        final_description="$custom_description"
+    else
+        final_description="$exif_description"
+    fi
+
+    # Use tags
     if [ -n "$custom_tags" ]; then
         tags="$custom_tags"
     elif [[ "$make" == "OLYMPUS IMAGING CORP." && "$model" == "C70Z,C7000Z" ]]; then
@@ -54,7 +80,7 @@ for img in *.jpg *.jpeg *.JPG; do
     cat <<EOF > "$yaml"
 title: "${base//_/ }"
 tags: $tags
-description: "$description"
+description: "$final_description"
 priority: 1
 EOF
 
