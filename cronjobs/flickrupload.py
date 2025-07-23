@@ -12,6 +12,8 @@ base_dir = os.path.dirname(script_dir)
 common_dir = os.path.join(base_dir, "cronjobs")
 home_dir = os.path.expanduser("~")
 
+os.makedirs(QUARANTINE_FOLDER, exist_ok=True)
+
 # Add paths to sys.path
 for path in (base_dir, home_dir):
     if path not in sys.path:
@@ -53,6 +55,7 @@ def select_best_candidate(candidates):
     return best
 
 
+
 def run_daily_upload():
     candidates = find_candidates(WATCH_FOLDER)
     if not candidates:
@@ -66,14 +69,19 @@ def run_daily_upload():
         tags = metadata.get('tags', '')
         description = metadata.get('description', '')
 
-        upload_to_flickr(image_path, title, tags, description)
-
-        os.remove(image_path)
-        os.remove(yaml_path)
-        print(f"✅ Uploaded and removed: {image_path}, {yaml_path}")
+        try:
+            upload_to_flickr(image_path, title, tags, description)
+            os.remove(image_path)
+            os.remove(yaml_path)
+            print(f"✅ Uploaded and removed: {image_path}, {yaml_path}")
+        except Exception as e:
+            print(f"❌ Upload failed: {e}")
+            # Move to quarantine folder
+            shutil.move(image_path, os.path.join(QUARANTINE_FOLDER, os.path.basename(image_path)))
+            shutil.move(yaml_path, os.path.join(QUARANTINE_FOLDER, os.path.basename(yaml_path)))
+            print(f"⚠️ Files moved to quarantine: {QUARANTINE_FOLDER}")
     else:
         print("No valid image to upload.")
-
 if __name__ == "__main__":
     run_daily_upload()
 
