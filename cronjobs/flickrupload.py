@@ -12,7 +12,6 @@ base_dir = os.path.dirname(script_dir)
 common_dir = os.path.join(base_dir, "cronjobs")
 home_dir = os.path.expanduser("~")
 
-os.makedirs(QUARANTINE_FOLDER, exist_ok=True)
 
 # Add paths to sys.path
 for path in (base_dir, home_dir):
@@ -24,6 +23,9 @@ from common.flickr_uploader import upload_to_flickr
 # Folder where images and YAMLs are stored
 WATCH_FOLDER = "/home/holly/flickr_uploads"
 SUPPORTED_EXTENSIONS = ['.jpg', '.jpeg', '.png']
+QUARANTINE_FOLDER = os.path.join(WATCH_FOLDER, "failed")
+os.makedirs(QUARANTINE_FOLDER, exist_ok=True)
+
 
 def find_candidates(folder):
     candidates = []
