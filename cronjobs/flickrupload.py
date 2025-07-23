@@ -37,13 +37,21 @@ def select_best_candidate(candidates):
     best = None
     highest_priority = -1
     for image_path, yaml_path in candidates:
-        with open(yaml_path, 'r') as f:
-            data = yaml.safe_load(f)
-            priority = data.get('priority', 0)
-            if priority > highest_priority:
-                best = (image_path, yaml_path, data)
-                highest_priority = priority
+        try:
+            with open(yaml_path, 'r') as f:
+                data = yaml.safe_load(f)
+                if not isinstance(data, dict):
+                    print(f"⚠️ Skipping malformed YAML (not a dict): {yaml_path}")
+                    continue
+                priority = data.get('priority', 0)
+                if priority > highest_priority:
+                    best = (image_path, yaml_path, data)
+                    highest_priority = priority
+        except Exception as e:
+            print(f"⚠️ Failed to parse {yaml_path}: {e}")
+            continue
     return best
+
 
 def run_daily_upload():
     candidates = find_candidates(WATCH_FOLDER)
