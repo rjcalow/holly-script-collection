@@ -5,6 +5,7 @@ import yaml
 # --- secrets ---
 import os
 import sys
+import shutil
 
 # Get the absolute path to the directory containing this script
 script_dir = os.path.dirname(os.path.abspath(__file__))
