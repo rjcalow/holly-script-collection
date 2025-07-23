@@ -71,19 +71,25 @@ def run_daily_upload():
         tags = metadata.get('tags', '')
         description = metadata.get('description', '')
 
-        try:
-            upload_to_flickr(image_path, title, tags, description)
+        print(f"📤 Uploading: {image_path}...")
+
+        success = upload_to_flickr(image_path, title, tags, description)
+
+        if success:
             os.remove(image_path)
             os.remove(yaml_path)
             print(f"✅ Uploaded and removed: {image_path}, {yaml_path}")
-        except Exception as e:
-            print(f"❌ Upload failed: {e}")
-            # Move to quarantine folder
-            shutil.move(image_path, os.path.join(QUARANTINE_FOLDER, os.path.basename(image_path)))
-            shutil.move(yaml_path, os.path.join(QUARANTINE_FOLDER, os.path.basename(yaml_path)))
-            print(f"⚠️ Files moved to quarantine: {QUARANTINE_FOLDER}")
+        else:
+            # Move to quarantine folder instead of deleting
+            quarantine_folder = os.path.join(WATCH_FOLDER, "failed")
+            os.makedirs(quarantine_folder, exist_ok=True)
+            shutil.move(image_path, os.path.join(quarantine_folder, os.path.basename(image_path)))
+            shutil.move(yaml_path, os.path.join(quarantine_folder, os.path.basename(yaml_path)))
+            print(f"❌ Upload failed — files moved to quarantine: {quarantine_folder}")
     else:
         print("No valid image to upload.")
+
+
 if __name__ == "__main__":
     run_daily_upload()
 
