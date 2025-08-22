@@ -18,7 +18,7 @@ from common.octopus import get_octopus_agile_daily_rates
 from common.telegram_msg import send_telegram_alert
 
 # --- settings ---
-GSP_GROUP_ID = "B"
+GSP_GROUP_ID = "M"
 LOCAL_TZ = ZoneInfo("Europe/London")
 ALERT_THRESHOLD = 0.0   # change to e.g. 1.0 if you want ≤1p alerts
 
