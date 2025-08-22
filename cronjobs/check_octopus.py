@@ -16,7 +16,7 @@ for path in (base_dir, home_dir):
         sys.path.insert(0, path)
 
 
-from common.octopus import get_octopus_agile_daily_rates(
+from common.octopus import get_octopus_agile_daily_rates
 from common.telegram_msg import send_telegram_alert
 
 GSP_GROUP_ID = "B" 
