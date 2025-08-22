@@ -1,5 +1,6 @@
 import requests
 from datetime import datetime, timedelta, timezone
+import pytz
 
 def fetch_all_products():
     """Fetch all Octopus products with pagination."""
@@ -58,7 +59,7 @@ def get_octopus_agile_daily_rates(gsp_group_id: str):
     Fetch all Agile rates for today (UTC day).
 
     Args:
-        gsp_group_id (str): Regional GSP Group ID (e.g., 'B').
+        gsp_group_id (str): Regional GSP Group ID (e.g., 'B', 'M').
 
     Returns:
         dict: {timestamp: rate_inc_vat} or None on failure.
@@ -99,13 +100,17 @@ def get_octopus_agile_daily_rates(gsp_group_id: str):
 
 
 if __name__ == "__main__":
-    # Example: East Midlands GSP = "B"
-    your_gsp_group_id = "B"
+    # Example: Yorkshire (Worksop S81) uses GSP = "M"
+    your_gsp_group_id = "M"
     all_rates = get_octopus_agile_daily_rates(your_gsp_group_id)
 
     if all_rates:
+        london_tz = pytz.timezone("Europe/London")
         print("✅ Agile daily rates fetched successfully:")
-        for time, rate in sorted(all_rates.items()):
-            print(f"  {time}: {rate:.2f} p/kWh")
+        for time_str, rate in sorted(all_rates.items()):
+            # Convert UTC → UK local time
+            utc_time = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            local_time = utc_time.astimezone(london_tz)
+            print(f"  {local_time.strftime('%H:%M')} → {rate:.2f} p/kWh")
     else:
         print("❌ Failed to retrieve daily rates.")

@@ -1,7 +1,7 @@
 import os
 import sys
 from datetime import datetime, timezone
-from zoneinfo import ZoneInfo  # Python 3.9+
+import pytz
 
 # --- paths setup ---
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -18,9 +18,9 @@ from common.octopus import get_octopus_agile_daily_rates
 from common.telegram_msg import send_telegram_alert
 
 # --- settings ---
-GSP_GROUP_ID = "M"
-LOCAL_TZ = ZoneInfo("Europe/London")
-ALERT_THRESHOLD = 0.0   # change to e.g. 1.0 if you want ≤1p alerts
+GSP_GROUP_ID = "M"   
+LOCAL_TZ = pytz.timezone("Europe/London")
+ALERT_THRESHOLD = 0.0   # change to 1.0 if you want ≤1p alerts
 
 # --- main logic ---
 all_daily_rates = get_octopus_agile_daily_rates(GSP_GROUP_ID)
@@ -30,8 +30,8 @@ if all_daily_rates is not None and all_daily_rates:
 
     # Convert to local times + filter
     for time_str, rate in all_daily_rates.items():
-        start_time_utc = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
-        local_time = start_time_utc.astimezone(LOCAL_TZ)
+        utc_time = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+        local_time = utc_time.astimezone(LOCAL_TZ)
         if rate <= ALERT_THRESHOLD:
             negative_rates.append((local_time, rate))
 
