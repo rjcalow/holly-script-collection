@@ -2,6 +2,23 @@ import requests
 from datetime import datetime, timedelta
 import pytz
 
+def get_current_agile_product_code():
+    """Fetches the current Agile tariff product code from the API."""
+    url = "https://api.octopus.energy/v1/products/"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        products = response.json().get('results', [])
+        
+        # Find the product that is Agile and is active
+        for product in products:
+            if product['code'].startswith('AGILE') and product['is_active']:
+                return product['code']
+        return None
+    except requests.exceptions.RequestException as e:
+        print(f"Error fetching product code: {e}")
+        return None
+
 def get_octopus_agile_daily_rates(gsp_group_id):
     """
     Fetches all Octopus Energy Agile rates for the entire day.
@@ -12,7 +29,11 @@ def get_octopus_agile_daily_rates(gsp_group_id):
     Returns:
         dict: A dictionary of rates keyed by the start time, or None if an error occurs.
     """
-    product_code = "AGILE-23-12-06"
+    product_code = get_current_agile_product_code()
+    if not product_code:
+        print("Could not find a valid Agile product code.")
+        return None
+
     tariff_code = f"E-1R-{product_code}-{gsp_group_id}"
     
     # Get the start of the current day in UTC
@@ -21,7 +42,7 @@ def get_octopus_agile_daily_rates(gsp_group_id):
     period_to = (utc_today + timedelta(days=1)).isoformat()
 
     url = f"https://api.octopus.energy/v1/products/{product_code}/electricity-tariffs/{tariff_code}/standard-unit-rates/?period_from={period_from}&period_to={period_to}"
-
+    
     try:
         response = requests.get(url)
         response.raise_for_status()
@@ -29,23 +50,9 @@ def get_octopus_agile_daily_rates(gsp_group_id):
         
         rates = {}
         for result in data.get('results', []):
-            start_time_str = result['valid_from']
-            rate_value = result['value_inc_vat']
-            rates[start_time_str] = rate_value
-            
+            rates[result['valid_from']] = result['value_inc_vat']
         return rates
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred while fetching data: {e}")
         return None
-
-# This allows you to test the script on its own if needed.
-if __name__ == "__main__":
-    your_gsp_group_id = "B"
-    all_rates = get_octopus_agile_daily_rates(your_gsp_group_id)
-    if all_rates:
-        print("Daily rates fetched successfully:")
-        for time, rate in all_rates.items():
-            print(f"  {time}: {rate:.2f} p/kWh")
-    else:
-        print("Failed to retrieve daily rates.")
