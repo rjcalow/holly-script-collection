@@ -44,6 +44,6 @@ for feed in feeds:
     if not fresh:
         any_stale = True
 
-if any_stale:
-    send_telegram_alert("⚠️ Weather feeds have not been updated recently. Battery may be dead or device offline."
-    )
+# if any_stale:
+#     send_telegram_alert("⚠️ Weather feeds have not been updated recently. Battery may be dead or device offline."
+#     )
