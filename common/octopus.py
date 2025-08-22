@@ -1,58 +1,51 @@
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
 
-def get_octopus_agile_rate(gsp_group_id):
+def get_octopus_agile_daily_rates(gsp_group_id):
     """
-    Checks the current Octopus Energy Agile rate for a given GSP Group ID.
+    Fetches all Octopus Energy Agile rates for the entire day.
 
     Args:
-        gsp_group_id (str): Your regional GSP Group ID (e.g., 'A' for Eastern England).
+        gsp_group_id (str): Your regional GSP Group ID (e.g., 'B' for East Midlands).
 
     Returns:
-        float: The current electricity rate in p/kWh, or None if an error occurs.
+        dict: A dictionary of rates keyed by the start time, or None if an error occurs.
     """
-    # The current product code for the Agile tariff.
-    product_code = "AGILE-23-12-06"  
-    
-    # Construct the tariff code with the GSP Group ID.
+    product_code = "AGILE-23-12-06"
     tariff_code = f"E-1R-{product_code}-{gsp_group_id}"
-
-    # Get the current time in UTC, which is what the API uses.
-    utc_now = datetime.now(pytz.utc)
     
-    # Format the time for the API request (ISO 8601 format).
-    period_from = utc_now.strftime("%Y-%m-%dT%H:%M:%SZ")
+    # Get the start of the current day in UTC
+    utc_today = datetime.now(pytz.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    period_from = utc_today.isoformat()
+    period_to = (utc_today + timedelta(days=1)).isoformat()
 
-    # Construct the API URL to get the latest standard unit rates.
-    url = f"https://api.octopus.energy/v1/products/{product_code}/electricity-tariffs/{tariff_code}/standard-unit-rates/?period_from={period_from}"
+    url = f"https://api.octopus.energy/v1/products/{product_code}/electricity-tariffs/{tariff_code}/standard-unit-rates/?period_from={period_from}&period_to={period_to}"
 
     try:
         response = requests.get(url)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        
+        response.raise_for_status()
         data = response.json()
         
-        # The API returns rates in reverse chronological order, so the first
-        # element is the current half-hour's rate.
-        if data['results']:
-            current_rate = data['results'][0]['value_inc_vat']
-            # The rate is in pence per kilowatt-hour (p/kWh)
-            return current_rate
-        else:
-            print("No rate data found for the current time.")
-            return None
+        rates = {}
+        for result in data.get('results', []):
+            start_time_str = result['valid_from']
+            rate_value = result['value_inc_vat']
+            rates[start_time_str] = rate_value
+            
+        return rates
 
     except requests.exceptions.RequestException as e:
         print(f"An error occurred while fetching data: {e}")
         return None
 
-# --- Usage Example ---
-# The GSP Group ID for ...., which is in the East Midlands, is B.
-# your_gsp_group_id = "B" 
-# current_rate_pkwh = get_octopus_agile_rate(your_gsp_group_id)
-
-# if current_rate_pkwh is not None:
-#     print(f"The current Octopus Agile rate is: {current_rate_pkwh:.2f} p/kWh")
-# else:
-#     print("Could not retrieve the current rate.")
+# This allows you to test the script on its own if needed.
+if __name__ == "__main__":
+    your_gsp_group_id = "B"
+    all_rates = get_octopus_agile_daily_rates(your_gsp_group_id)
+    if all_rates:
+        print("Daily rates fetched successfully:")
+        for time, rate in all_rates.items():
+            print(f"  {time}: {rate:.2f} p/kWh")
+    else:
+        print("Failed to retrieve daily rates.")

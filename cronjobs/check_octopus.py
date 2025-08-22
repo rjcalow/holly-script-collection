@@ -1,3 +1,5 @@
+#aim is to check the days Octopus Agile rates for negative or zero prices and send an alert via Telegram
+
 # --- secrets ---
 import os
 import sys
@@ -18,16 +20,28 @@ from common.octopus import get_octopus_agile_rate
 from common.telegram_msg import send_telegram_alert
 
 GSP_GROUP_ID = "B" 
-current_rate_pkwh = get_octopus_agile_rate(GSP_GROUP_ID)
+# --- Main Logic ---
+all_daily_rates = get_octopus_agile_daily_rates(GSP_GROUP_ID)
 
-if current_rate_pkwh is not None:
-    print(f"The current Octopus Agile rate is: {current_rate_pkwh:.2f} p/kWh")
+if all_daily_rates is not None:
+    negative_rates = {}
+    
+    # Check for negative or zero rates
+    for time, rate in all_daily_rates.items():
+        if rate <= 0:
+            negative_rates[time] = rate
 
-    # Check if the price is negative (or zero for simplicity)
-    if current_rate_pkwh <= 0:
-        message = f"⚡️ *Negative Price Alert!* ⚡️\n\nThe current Octopus Agile rate is {current_rate_pkwh:.2f} p/kWh.\n\nTime to charge up your batteries or run your appliances for free!"
+    if negative_rates:
+        message_parts = ["⚡️ *Negative/Free Price Alert!* ⚡️\n\nThe following time slots have a negative or zero price today:\n"]
+        for time_str, rate in sorted(negative_rates.items()):
+            # Convert the UTC time to a more readable format
+            start_time_utc = datetime.fromisoformat(time_str.replace("Z", "+00:00"))
+            local_time_str = start_time_utc.astimezone(pytz.timezone('Europe/London')).strftime("%H:%M")
+            message_parts.append(f"• From {local_time_str}: {rate:.2f} p/kWh")
+
+        message = "\n".join(message_parts)
         send_telegram_alert(message)
     else:
-        print("The current price is not negative.")
+        print("No negative or zero rates found for the day.")
 else:
-    print("Could not retrieve the current rate.")
+    print("Could not retrieve daily rates.")
