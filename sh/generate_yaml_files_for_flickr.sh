@@ -93,26 +93,28 @@ for img in *.jpg *.jpeg *.JPG; do
     else
         final_description="$exif_description"
     fi
-
+    
     # --- TAG LOGIC ---
     tags=()
 
-    # Always include make/model/lens/focal/fstop
-    tags+=("$make" "$model" "$lens" "$focal" "f/$fstop")
-
-    # Add Olympus digicam tags if matching
     if [[ "$make" == "OLYMPUS IMAGING CORP." && "$model" == "C70Z,C7000Z" ]]; then
-        tags+=("olympus" "c70" "olympus c70" "c70z" "c7000z" "compact digital camera" \
-               "digicam" "ccd sensor" "snapshot" "point and shoot" "ccd" "digital" "vsco")
+        # Olympus special case
+        tags+=("olympus" "c70" "olympus c70" "c70z" "c7000z"
+               "compact digital camera" "digicam" "ccd sensor"
+               "snapshot" "point and shoot" "ccd" "digital" "vsco")
+
+    elif [[ "$make" == "JK Imaging, Ltd." && "$model" == "KODAK PIXPRO C1" ]]; then
+        # Kodak special case
+        tags+=("KODAK" "PIXPRO" "c1" "pixproc1"
+               "compact digital camera" "digicam"
+               "snapshot" "point and shoot" "p&s" "digital" "vsco")
+
+    else
+        # Generic case: use EXIF
+        tags+=("$make" "$model" "$lens" "$focal" "f/$fstop")
     fi
 
-    # Add Kodak digicam tags if matching
-    if [[ "$make" == "JK Imaging, Ltd." && "$model" == "KODAK PIXPRO C1" ]]; then
-        tags+=("KODAK" "PIXPRO" "c1" "pixproc1" "compact digital camera" \
-               "digicam" "snapshot" "point and shoot" "p&s" "digital" "vsco")
-    fi
-
-    # Add custom tags (always applied on top)
+    # Always append custom tags (if given)
     if [ ${#custom_tags[@]} -gt 0 ]; then
         tags+=("${custom_tags[@]}")
     fi
@@ -127,6 +129,7 @@ for img in *.jpg *.jpeg *.JPG; do
     done
     tag_str="${tag_str%, }]"
     # -----------------
+
 
     # Write YAML
     cat <<EOF > "$yaml"
