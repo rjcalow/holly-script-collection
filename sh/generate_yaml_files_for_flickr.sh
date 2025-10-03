@@ -72,6 +72,8 @@ for img in *.jpg *.jpeg *.JPG; do
         tags="$custom_tags"
     elif [[ "$make" == "OLYMPUS IMAGING CORP." && "$model" == "C70Z,C7000Z" ]]; then
         tags='["olympus", "c70", "olympus c70", "c70z", "c7000z", "compact digital camera", "digicam", "ccd sensor", "snapshot", "point and shoot", "ccd", "digital", "vsco"]'
+    elif [[ "$make" == "JK Imaging, Ltd." && "$model" == "KODAK PIXPRO C1" ]]; then
+        tags='["KODAK", "PIXPRO", "c1", "pixproc1", "compact digital camera", "digicam", "snapshot", "point and shoot", "p&s", "digital", "vsco"]'
     else
         tags="[$(printf '"%s", ' "$make" "$model" "$lens" "$focal" "f/$fstop" | sed 's/, $//')]"
     fi
