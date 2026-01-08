@@ -38,7 +38,7 @@ trap cleanup EXIT
 # sleep 1 # Give Ollama time to (re)start
 
 # === Script config ===
-scripts=('holly.py' 'reddit_bot.py' 'weather_bot.py' '/filmsim_bot/filmsim_bot.py') #in bash lists are speparated by spaces
+scripts=('holly.py' 'reddit_bot.py' 'weather_bot.py' 'filmsim_bot/filmsim_bot.py') #in bash lists are speparated by spaces
 dir_="/home/holly/holly-script-collection/tele_bots"
 python_env="/home/holly/holly_env/bin/python3"
 
@@ -61,8 +61,9 @@ while true; do
       echo "$(date) - $s is running (PID: $process_id)"
     else
       echo "$(date) - $s is not running, starting it..."
-      nohup "$python_env" "$dir_/$s" > "$dir_/${s}.log" 2>&1 &
-      echo "$(date) - $s started, check ${s}.log for output"
+      log_name="${s//\//_}.log"
+      nohup "$python_env" "$dir_/$s" > "$dir_/$log_name" 2>&1 &
+      echo "$(date) - $s started, check $log_name for output"
       sleep 1
     fi
   done
