@@ -13,7 +13,11 @@ if home_dir not in sys.path:
 
 # --------- CONFIG ----------
 # But you forgot `import sys` in your posted file. (Now included above.)
-from _secrets import filmsimbottoken
+try:
+    from _secrets import filmsimbottoken, PAYMENT_PROVIDER_TOKEN
+except ImportError:
+    from _secrets import filmsimbottoken
+    PAYMENT_PROVIDER_TOKEN = os.environ.get("FILMSIM_PAYMENT_PROVIDER_TOKEN", "")
 
 TOKEN = filmsimbottoken
 if not TOKEN:
@@ -36,6 +40,21 @@ INTENSITIES = [0.25, 0.50, 0.75, 1.00]
 
 # Limit concurrency: 1 worker is safest on an RPi/server.
 WORKERS = int(os.environ.get("FILMSIM_WORKERS", "1"))
+
+# database
+from filmsim_db import FilmSimDB
+DB_PATH = os.path.join(BASE, "filmsim.db")
+db = FilmSimDB(DB_PATH)
+
+FREE_DAILY_LIMIT = 5 #limits for non-premium users
+PREMIUM_PLANS = {
+    "premium_30d": {
+        "title": "FilmSim Premium (30 days)",
+        "description": "Unlimited exports for 30 days.",
+        "days": 30,
+        "stars": 199,
+    }
+}
 
 # Cleanup policy:
 # If True, delete the input image after each processing (tidy, but user can't re-apply different LUT without re-uploading).
@@ -90,7 +109,8 @@ def kb_luts(luts, page):
     end = min(total, start + PAGE_SIZE)
 
     for rel in luts[start:end]:
-        label = rel if len(rel) <= 44 else ("…" + rel[-43:])
+        display = rel[:-5] if rel.lower().endswith(".cube") else rel #strip extension, looks nasty in menu
+        label = display if len(display) <= 44 else ("…" + display[-43:])
         kb.add(types.InlineKeyboardButton(label, callback_data=f"lut|{page}|{rel}"))
 
     nav = []
@@ -152,6 +172,9 @@ def worker_loop(n: int):
 
             with open(out_path, "rb") as f:
                 bot.send_photo(chat_id, f, caption=f"{lut_rel} @ {float(intensity):.2f}\nTags: {tags or '(none)'}")
+            
+            # ---- COUNT A SUCCESSFUL EXPORT (ADD THIS) ----
+            db.increment_usage(user_id)
 
             bot.edit_message_text("Done ✅", chat_id, msg_id)
 
@@ -215,6 +238,55 @@ def clear(m):
             pass
     bot.reply_to(m, "Cleared your current selection.")
 
+
+@bot.message_handler(commands=["usage"])
+def usage(m):
+    uid = m.from_user.id
+    used = db.get_usage_today(uid)
+    if db.is_premium(uid):
+        bot.reply_to(m, f"⭐ Premium: unlimited exports.\nToday: {used} exports.")
+    else:
+        bot.reply_to(m, f"Free exports today: {used}/{FREE_DAILY_LIMIT}\nUpgrade: /premium")
+
+
+@bot.message_handler(commands=["premium"])
+def premium(m):
+    if not PAYMENT_PROVIDER_TOKEN:
+        bot.reply_to(m, "Premium is not configured yet. Please try again later.")
+        return
+    plan = PREMIUM_PLANS["premium_30d"]
+    prices = [types.LabeledPrice(label=plan["title"], amount=plan["stars"])]
+    bot.send_invoice(
+        m.chat.id,
+        title=plan["title"],
+        description=plan["description"],
+        payload="premium_30d",
+        provider_token=PAYMENT_PROVIDER_TOKEN,
+        currency="XTR",
+        prices=prices,
+    )
+
+
+@bot.pre_checkout_query_handler(func=lambda q: True)
+def pre_checkout(q):
+    if q.invoice_payload not in PREMIUM_PLANS:
+        bot.answer_pre_checkout_query(q.id, ok=False, error_message="Unknown plan.")
+        return
+    bot.answer_pre_checkout_query(q.id, ok=True)
+
+
+@bot.message_handler(content_types=["successful_payment"])
+def on_successful_payment(m):
+    payload = m.successful_payment.invoice_payload
+    plan = PREMIUM_PLANS.get(payload)
+    if not plan:
+        bot.send_message(m.chat.id, "Payment received, but the plan is unknown.")
+        return
+    new_until = db.grant_premium_days(m.from_user.id, plan["days"])
+    bot.send_message(
+        m.chat.id,
+        f"Premium active until {new_until.strftime('%Y-%m-%d')} ✅",
+    )
 
 @bot.message_handler(commands=["tags"])
 def tags(m):
@@ -291,6 +363,18 @@ def cb(c):
         return
 
     if data.startswith("int|"):
+        # ---- DAILY LIMIT CHECK (ADD THIS) ----
+        allowed, used, limit = db.can_process(uid, FREE_DAILY_LIMIT)
+        if not allowed:
+            bot.answer_callback_query(c.id, f"Daily limit reached ({used}/{limit}).")
+            bot.send_message(
+                c.message.chat.id,
+                "You’ve hit today’s free limit (5).\n"
+                "Upgrade to Premium for unlimited. (/premium)"
+            )
+            return
+        # ---- END DAILY LIMIT CHECK ----
+
         # prevent a single user stacking jobs
         if uid in USER_BUSY:
             bot.answer_callback_query(c.id, "Still processing your last request…")
