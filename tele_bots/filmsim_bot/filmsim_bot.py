@@ -12,7 +12,6 @@ if home_dir not in sys.path:
     sys.path.insert(0, home_dir)
 
 # --------- CONFIG ----------
-# But you forgot `import sys` in your posted file. (Now included above.)
 try:
     from _secrets import filmsimbottoken, PAYMENT_PROVIDER_TOKEN
 except ImportError:
@@ -52,7 +51,7 @@ PREMIUM_PLANS = {
         "title": "FilmSim Premium (30 days)",
         "description": "Unlimited exports for 30 days.",
         "days": 30,
-        "stars": 1,
+        "stars": 199,
     }
 }
 
@@ -170,8 +169,12 @@ def worker_loop(n: int):
                 timeout=120,
             )
 
+            caption = f"{lut_rel} @ {float(intensity):.2f}"
+            if tags:
+                caption = f"{caption}\nTags: {tags}"
             with open(out_path, "rb") as f:
                 bot.send_photo(chat_id, f, caption=f"{lut_rel} @ {float(intensity):.2f}\nTags: {tags or '(none)'}")
+                bot.send_photo(chat_id, f, caption=caption)
             
             # ---- COUNT A SUCCESSFUL EXPORT (ADD THIS) ----
             db.increment_usage(user_id)
@@ -214,7 +217,7 @@ for i in range(WORKERS):
 def start(m):
     bot.reply_to(
         m,
-        "Send me a photo, then choose a LUT.\n\n"
+        "Send me a photo, then choose a filter.\n\n"
         "Commands:\n"
         "/tags comma,separated,tags  (applies to next export)\n"
         "/luts  (browse LUTs)\n"
