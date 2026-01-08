@@ -52,7 +52,7 @@ PREMIUM_PLANS = {
         "title": "FilmSim Premium (30 days)",
         "description": "Unlimited exports for 30 days.",
         "days": 30,
-        "stars": 199,
+        "stars": 1,
     }
 }
 
