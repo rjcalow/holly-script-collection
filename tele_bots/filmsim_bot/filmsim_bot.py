@@ -8,8 +8,6 @@ from telebot import types
 # ---- preinit sys.path  DO NOT REMOVE! ----
 # Get the user's home directory
 home_dir = os.path.expanduser("~")
-if base_dir not in sys.path:
-    sys.path.insert(0, base_dir)
 if home_dir not in sys.path:
     sys.path.insert(0, home_dir)
 
