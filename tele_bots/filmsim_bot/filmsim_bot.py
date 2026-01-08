@@ -1,0 +1,341 @@
+#!/usr/bin/env python3
+import os, uuid, math, subprocess, threading, queue, time, sys
+from pathlib import Path
+
+import telebot
+from telebot import types
+
+# ---- preinit sys.path  DO NOT REMOVE! ----
+# Get the user's home directory
+home_dir = os.path.expanduser("~")
+if base_dir not in sys.path:
+    sys.path.insert(0, base_dir)
+if home_dir not in sys.path:
+    sys.path.insert(0, home_dir)
+
+# --------- CONFIG ----------
+# But you forgot `import sys` in your posted file. (Now included above.)
+from _secrets import filmsimbottoken
+
+TOKEN = filmsimbottoken
+if not TOKEN:
+    raise RuntimeError("filmsimbottoken missing")
+
+LUT_DIR = os.environ.get("FILMSIM_LUT_DIR", "/home/holly/luts")
+LUT_DIR = os.path.abspath(LUT_DIR)
+
+BASE = os.path.dirname(os.path.abspath(__file__))
+WORK_DIR = os.path.join(BASE, "work")           # <— tidy
+SCRIPT = os.path.join(BASE, "apply_lut.sh")
+
+os.makedirs(WORK_DIR, exist_ok=True)
+
+if not os.path.isfile(SCRIPT):
+    raise RuntimeError(f"apply_lut.sh not found at {SCRIPT}")
+
+PAGE_SIZE = 12
+INTENSITIES = [0.25, 0.50, 0.75, 1.00]
+
+# Limit concurrency: 1 worker is safest on an RPi/server.
+WORKERS = int(os.environ.get("FILMSIM_WORKERS", "1"))
+
+# Cleanup policy:
+# If True, delete the input image after each processing (tidy, but user can't re-apply different LUT without re-uploading).
+# If False, keep last input per user so they can try multiple LUTs quickly.
+DELETE_INPUT_AFTER_PROCESS = os.environ.get("FILMSIM_DELETE_INPUT", "0") == "1"
+
+bot = telebot.TeleBot(TOKEN)
+
+# per-user state
+STATE = {}
+# per-user lock to prevent stacking jobs
+USER_BUSY = set()
+
+# job queue
+Job = dict
+JOB_Q: "queue.Queue[Job]" = queue.Queue(maxsize=200)
+
+
+def user_dir(user_id: int) -> str:
+    p = os.path.join(WORK_DIR, str(user_id))
+    os.makedirs(p, exist_ok=True)
+    return p
+
+
+def list_luts():
+    out = []
+    for root, _, files in os.walk(LUT_DIR):
+        for f in files:
+            if f.lower().endswith(".cube"):
+                rel = os.path.relpath(os.path.join(root, f), LUT_DIR).replace("\\", "/")
+                out.append(rel)
+    return sorted(out)
+
+
+def safe_lut_abs(rel):
+    rel = (rel or "").replace("\\", "/")
+    abs_path = os.path.abspath(os.path.join(LUT_DIR, rel))
+    if not abs_path.startswith(LUT_DIR + os.sep):
+        raise ValueError("Invalid LUT path")
+    if not os.path.isfile(abs_path):
+        raise FileNotFoundError("LUT not found")
+    return abs_path
+
+
+def kb_luts(luts, page):
+    total = len(luts)
+    pages = max(1, math.ceil(total / PAGE_SIZE))
+    page = max(0, min(page, pages - 1))
+
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    start = page * PAGE_SIZE
+    end = min(total, start + PAGE_SIZE)
+
+    for rel in luts[start:end]:
+        label = rel if len(rel) <= 44 else ("…" + rel[-43:])
+        kb.add(types.InlineKeyboardButton(label, callback_data=f"lut|{page}|{rel}"))
+
+    nav = []
+    if page > 0:
+        nav.append(types.InlineKeyboardButton("⬅ Prev", callback_data=f"page|{page-1}"))
+    nav.append(types.InlineKeyboardButton(f"Page {page+1}/{pages}", callback_data="noop"))
+    if page < pages - 1:
+        nav.append(types.InlineKeyboardButton("Next ➡", callback_data=f"page|{page+1}"))
+    kb.row(*nav)
+    return kb
+
+
+def kb_intensity():
+    kb = types.InlineKeyboardMarkup(row_width=4)
+    btns = [types.InlineKeyboardButton(f"{v:.2f}", callback_data=f"int|{v:.2f}") for v in INTENSITIES]
+    kb.add(*btns)
+    return kb
+
+
+def cleanup_user_outputs(uid: int):
+    """Keep the folder tidy: remove stale outputs, temp files."""
+    d = user_dir(uid)
+    for name in ("out.jpg", "out.jpeg", "out.png", "tmp.jpg", "tmp.png"):
+        p = os.path.join(d, name)
+        try:
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+
+
+def worker_loop(n: int):
+    while True:
+        job = JOB_Q.get()
+        if job is None:
+            JOB_Q.task_done()
+            return
+
+        user_id = job["user_id"]
+        chat_id = job["chat_id"]
+        msg_id = job["status_msg_id"]
+        in_path = job["in_path"]
+        lut_rel = job["lut_rel"]
+        intensity = job["intensity"]
+        tags = job["tags"]
+
+        out_path = os.path.join(user_dir(user_id), "out.jpg")
+
+        try:
+            cleanup_user_outputs(user_id)
+
+            lut_path = safe_lut_abs(lut_rel)
+
+            subprocess.run(
+                [SCRIPT, in_path, lut_path, out_path, str(intensity), tags],
+                check=True,
+                timeout=120,
+            )
+
+            with open(out_path, "rb") as f:
+                bot.send_photo(chat_id, f, caption=f"{lut_rel} @ {float(intensity):.2f}\nTags: {tags or '(none)'}")
+
+            bot.edit_message_text("Done ✅", chat_id, msg_id)
+
+        except subprocess.TimeoutExpired:
+            bot.edit_message_text("Error: processing timed out.", chat_id, msg_id)
+        except subprocess.CalledProcessError as e:
+            bot.edit_message_text(f"Error: processing failed ({e.returncode}).", chat_id, msg_id)
+        except Exception as e:
+            bot.edit_message_text(f"Error: {e}", chat_id, msg_id)
+        finally:
+            # tidy: always remove output
+            try:
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+            except Exception:
+                pass
+
+            # optional: remove input after processing
+            if DELETE_INPUT_AFTER_PROCESS:
+                try:
+                    if os.path.exists(in_path):
+                        os.remove(in_path)
+                except Exception:
+                    pass
+
+            USER_BUSY.discard(user_id)
+            JOB_Q.task_done()
+
+
+# start workers
+for i in range(WORKERS):
+    t = threading.Thread(target=worker_loop, args=(i,), daemon=True)
+    t.start()
+
+
+@bot.message_handler(commands=["start", "help"])
+def start(m):
+    bot.reply_to(
+        m,
+        "Send me a photo, then choose a LUT.\n\n"
+        "Commands:\n"
+        "/tags comma,separated,tags  (applies to next export)\n"
+        "/luts  (browse LUTs)\n"
+        "/clear (forget current photo)\n"
+    )
+
+
+@bot.message_handler(commands=["clear"])
+def clear(m):
+    uid = m.from_user.id
+    STATE.pop(uid, None)
+    USER_BUSY.discard(uid)
+    # tidy user folder but keep LUTs external
+    d = user_dir(uid)
+    for fn in ("in.jpg", "in.png", "in.jpeg"):
+        try:
+            p = os.path.join(d, fn)
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
+    bot.reply_to(m, "Cleared your current selection.")
+
+
+@bot.message_handler(commands=["tags"])
+def tags(m):
+    uid = m.from_user.id
+    val = m.text.split(" ", 1)[1].strip() if " " in m.text else ""
+    st = STATE.setdefault(uid, {})
+    st["tags"] = val
+    bot.reply_to(m, f"Tags set: {val or '(none)'}")
+
+
+@bot.message_handler(commands=["luts"])
+def luts(m):
+    uid = m.from_user.id
+    l = list_luts()
+    st = STATE.setdefault(uid, {})
+    st["luts"] = l
+    st["page"] = 0
+    bot.send_message(m.chat.id, "Pick a LUT:", reply_markup=kb_luts(l, 0))
+
+
+@bot.message_handler(content_types=["photo"])
+def photo(m):
+    uid = m.from_user.id
+
+    # largest version
+    p = m.photo[-1]
+    info = bot.get_file(p.file_id)
+    data = bot.download_file(info.file_path)
+
+    # keep tidy: overwrite user input
+    d = user_dir(uid)
+    in_path = os.path.join(d, "in.jpg")
+    with open(in_path, "wb") as f:
+        f.write(data)
+
+    l = list_luts()
+    prev_tags = STATE.get(uid, {}).get("tags", "")
+    STATE[uid] = {"in_path": in_path, "luts": l, "page": 0, "lut_rel": None, "tags": prev_tags}
+
+    bot.send_message(m.chat.id, "Photo received. Pick a LUT:", reply_markup=kb_luts(l, 0))
+
+
+@bot.callback_query_handler(func=lambda c: True)
+def cb(c):
+    uid = c.from_user.id
+    data = c.data or ""
+
+    if data == "noop":
+        bot.answer_callback_query(c.id)
+        return
+
+    st = STATE.get(uid)
+    if not st:
+        bot.answer_callback_query(c.id, "Send a photo first.")
+        return
+
+    if data.startswith("page|"):
+        page = int(data.split("|", 1)[1])
+        st["page"] = page
+        bot.edit_message_reply_markup(
+            chat_id=c.message.chat.id,
+            message_id=c.message.message_id,
+            reply_markup=kb_luts(st.get("luts", []), page),
+        )
+        bot.answer_callback_query(c.id)
+        return
+
+    if data.startswith("lut|"):
+        _, page_str, rel = data.split("|", 2)
+        st["page"] = int(page_str)
+        st["lut_rel"] = rel
+        bot.answer_callback_query(c.id, "Selected")
+        bot.send_message(c.message.chat.id, f"Selected LUT:\n{rel}\n\nPick intensity:", reply_markup=kb_intensity())
+        return
+
+    if data.startswith("int|"):
+        # prevent a single user stacking jobs
+        if uid in USER_BUSY:
+            bot.answer_callback_query(c.id, "Still processing your last request…")
+            return
+
+        intensity = data.split("|", 1)[1]
+        lut_rel = st.get("lut_rel")
+        in_path = st.get("in_path")
+        tags = st.get("tags", "")
+
+        if not lut_rel:
+            bot.answer_callback_query(c.id, "Pick a LUT first.")
+            return
+        if not in_path or not os.path.isfile(in_path):
+            bot.answer_callback_query(c.id, "Send a photo again.")
+            return
+
+        USER_BUSY.add(uid)
+
+        # enqueue job
+        try:
+            status = bot.send_message(c.message.chat.id, "Queued…")
+            JOB_Q.put_nowait({
+                "user_id": uid,
+                "chat_id": c.message.chat.id,
+                "status_msg_id": status.message_id,
+                "in_path": in_path,
+                "lut_rel": lut_rel,
+                "intensity": intensity,
+                "tags": tags,
+            })
+            bot.answer_callback_query(c.id, "Queued")
+        except queue.Full:
+            USER_BUSY.discard(uid)
+            bot.answer_callback_query(c.id, "Busy right now — try again in a minute.")
+            bot.send_message(c.message.chat.id, "Server is busy. Try again shortly.")
+        return
+
+    bot.answer_callback_query(c.id, "Unknown action.")
+
+
+if __name__ == "__main__":
+    print("filmsim_bot running…")
+    print("LUT_DIR:", LUT_DIR)
+    print("WORKERS:", WORKERS, "DELETE_INPUT_AFTER_PROCESS:", DELETE_INPUT_AFTER_PROCESS)
+    bot.infinity_polling(timeout=30, long_polling_timeout=30)
