@@ -38,7 +38,7 @@ trap cleanup EXIT
 # sleep 1 # Give Ollama time to (re)start
 
 # === Script config ===
-scripts=('holly.py' 'reddit_bot.py' 'weather_bot.py' 'filmsim_bot/filmsim_bot.py') #in bash lists are speparated by spaces
+scripts=('holly.py' 'reddit_bot.py' 'weather_bot.py' '/filmsim_bot/filmsim_bot.py') #in bash lists are speparated by spaces
 dir_="/home/holly/holly-script-collection/tele_bots"
 python_env="/home/holly/holly_env/bin/python3"
 
