@@ -251,20 +251,20 @@ def usage(m):
 
 @bot.message_handler(commands=["premium"])
 def premium(m):
-    if not PAYMENT_PROVIDER_TOKEN:
-        bot.reply_to(m, "Premium is not configured yet. Please try again later.")
-        return
     plan = PREMIUM_PLANS["premium_30d"]
-    prices = [types.LabeledPrice(label=plan["title"], amount=plan["stars"])]
+
+    prices = [types.LabeledPrice(label=plan["title"], amount=int(plan["stars"]))]
+
     bot.send_invoice(
         m.chat.id,
         title=plan["title"],
         description=plan["description"],
-        payload="premium_30d",
-        provider_token=PAYMENT_PROVIDER_TOKEN,
-        currency="XTR",
+        invoice_payload="premium_30d",
+        provider_token="",          # <-- Stars: MUST be empty
+        currency="XTR",             # <-- Stars currency
         prices=prices,
     )
+
 
 
 @bot.pre_checkout_query_handler(func=lambda q: True)
