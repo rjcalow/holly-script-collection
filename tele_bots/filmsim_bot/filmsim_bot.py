@@ -217,8 +217,19 @@ def worker_loop(n: int):
 
             lut_name = lut_rel[:-5] if lut_rel.lower().endswith(".cube") else lut_rel
             caption = f"{lut_name} recipe @ {float(intensity):.2f}"
+
+
+
+            
+            MAX_PHOTO_BYTES = 10 * 1024 * 1024  # 10MB
+            size = os.path.getsize(out_path)
+
             with open(out_path, "rb") as f:
-                bot.send_photo(chat_id, f, caption=caption)
+                if size <= MAX_PHOTO_BYTES:
+                    bot.send_photo(chat_id, f, caption=caption)
+                else:
+                    # Send as file to bypass the 10MB photo limit (keeps quality)
+                    bot.send_document(chat_id, f, caption=caption, visible_file_name="filmsimbotEXPORT.jpg")  
             
             # ---- COUNT A SUCCESSFUL EXPORT (ADD THIS) ----
             db.increment_usage(user_id)
