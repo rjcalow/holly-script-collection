@@ -13,10 +13,10 @@ if home_dir not in sys.path:
 
 # --------- CONFIG ----------
 try:
-    from _secrets import filmsimbottoken, PAYMENT_PROVIDER_TOKEN
+    from _secrets import filmsimbottoken
 except ImportError:
     from _secrets import filmsimbottoken
-    PAYMENT_PROVIDER_TOKEN = os.environ.get("FILMSIM_PAYMENT_PROVIDER_TOKEN", "")
+
 
 TOKEN = filmsimbottoken
 if not TOKEN:
@@ -36,6 +36,8 @@ if not os.path.isfile(SCRIPT):
 
 PAGE_SIZE = 12
 INTENSITIES = [0.25, 0.50, 0.75, 1.00]
+CATEGORY_ALL = "All"
+CATEGORY_UNCATEGORIZED = "Uncategorized"
 
 # Limit concurrency: 1 worker is safest on an RPi/server.
 WORKERS = int(os.environ.get("FILMSIM_WORKERS", "1"))
@@ -88,6 +90,27 @@ def list_luts():
     return sorted(out)
 
 
+def list_categories():
+    cats = set()
+    for rel in list_luts():
+        if "/" in rel:
+            cats.add(rel.split("/", 1)[0])
+        else:
+            cats.add(CATEGORY_UNCATEGORIZED)
+    out = [CATEGORY_ALL] + sorted(cats)
+    return out
+
+
+def list_luts_by_category(category: str):
+    all_luts = list_luts()
+    if category == CATEGORY_ALL:
+        return all_luts
+    if category == CATEGORY_UNCATEGORIZED:
+        return [rel for rel in all_luts if "/" not in rel]
+    prefix = category.rstrip("/") + "/"
+    return [rel for rel in all_luts if rel.startswith(prefix)]
+
+
 def safe_lut_abs(rel):
     rel = (rel or "").replace("\\", "/")
     abs_path = os.path.abspath(os.path.join(LUT_DIR, rel))
@@ -98,7 +121,7 @@ def safe_lut_abs(rel):
     return abs_path
 
 
-def kb_luts(luts, page):
+def kb_luts(luts, page, show_back=False):
     total = len(luts)
     pages = max(1, math.ceil(total / PAGE_SIZE))
     page = max(0, min(page, pages - 1))
@@ -118,6 +141,31 @@ def kb_luts(luts, page):
     nav.append(types.InlineKeyboardButton(f"Page {page+1}/{pages}", callback_data="noop"))
     if page < pages - 1:
         nav.append(types.InlineKeyboardButton("Next ➡", callback_data=f"page|{page+1}"))
+    kb.row(*nav)
+    if show_back:
+        kb.row(types.InlineKeyboardButton("⬅ Categories", callback_data="cats|0"))
+    return kb
+
+
+def kb_categories(cats, page):
+    total = len(cats)
+    pages = max(1, math.ceil(total / PAGE_SIZE))
+    page = max(0, min(page, pages - 1))
+
+    kb = types.InlineKeyboardMarkup(row_width=1)
+    start = page * PAGE_SIZE
+    end = min(total, start + PAGE_SIZE)
+
+    for cat in cats[start:end]:
+        label = cat if len(cat) <= 44 else ("…" + cat[-43:])
+        kb.add(types.InlineKeyboardButton(label, callback_data=f"cat|{page}|{cat}"))
+
+    nav = []
+    if page > 0:
+        nav.append(types.InlineKeyboardButton("⬅ Prev", callback_data=f"catpage|{page-1}"))
+    nav.append(types.InlineKeyboardButton(f"Page {page+1}/{pages}", callback_data="noop"))
+    if page < pages - 1:
+        nav.append(types.InlineKeyboardButton("Next ➡", callback_data=f"catpage|{page+1}"))
     kb.row(*nav)
     return kb
 
@@ -154,8 +202,6 @@ def worker_loop(n: int):
         in_path = job["in_path"]
         lut_rel = job["lut_rel"]
         intensity = job["intensity"]
-        tags = job["tags"]
-
         out_path = os.path.join(user_dir(user_id), "out.jpg")
 
         try:
@@ -164,16 +210,14 @@ def worker_loop(n: int):
             lut_path = safe_lut_abs(lut_rel)
 
             subprocess.run(
-                [SCRIPT, in_path, lut_path, out_path, str(intensity), tags],
+                [SCRIPT, in_path, lut_path, out_path, str(intensity)],
                 check=True,
                 timeout=120,
             )
 
-            caption = f"{lut_rel} @ {float(intensity):.2f}"
-            if tags:
-                caption = f"{caption}\nTags: {tags}"
+            lut_name = lut_rel[:-5] if lut_rel.lower().endswith(".cube") else lut_rel
+            caption = f"{lut_name} filter @ {float(intensity):.2f}"
             with open(out_path, "rb") as f:
-                bot.send_photo(chat_id, f, caption=f"{lut_rel} @ {float(intensity):.2f}\nTags: {tags or '(none)'}")
                 bot.send_photo(chat_id, f, caption=caption)
             
             # ---- COUNT A SUCCESSFUL EXPORT (ADD THIS) ----
@@ -219,9 +263,9 @@ def start(m):
         m,
         "Send me a photo, then choose a filter.\n\n"
         "Commands:\n"
-        "/tags comma,separated,tags  (applies to next export)\n"
-        "/luts  (browse LUTs)\n"
+        "/recipes  (browse film look recipes)\n"
         "/clear (forget current photo)\n"
+        "/usage (your current usage for today)\n"
     )
 
 
@@ -291,23 +335,14 @@ def on_successful_payment(m):
         f"Premium active until {new_until.strftime('%Y-%m-%d')} ✅",
     )
 
-@bot.message_handler(commands=["tags"])
-def tags(m):
+@bot.message_handler(commands=["recipes"])
+def recipes(m):
     uid = m.from_user.id
-    val = m.text.split(" ", 1)[1].strip() if " " in m.text else ""
     st = STATE.setdefault(uid, {})
-    st["tags"] = val
-    bot.reply_to(m, f"Tags set: {val or '(none)'}")
-
-
-@bot.message_handler(commands=["luts"])
-def luts(m):
-    uid = m.from_user.id
-    l = list_luts()
-    st = STATE.setdefault(uid, {})
-    st["luts"] = l
-    st["page"] = 0
-    bot.send_message(m.chat.id, "Pick a LUT:", reply_markup=kb_luts(l, 0))
+    st["cats"] = list_categories()
+    st["cat"] = CATEGORY_ALL
+    st["cat_page"] = 0
+    bot.send_message(m.chat.id, "Pick a category:", reply_markup=kb_categories(st["cats"], 0))
 
 
 @bot.message_handler(content_types=["photo"])
@@ -326,10 +361,17 @@ def photo(m):
         f.write(data)
 
     l = list_luts()
-    prev_tags = STATE.get(uid, {}).get("tags", "")
-    STATE[uid] = {"in_path": in_path, "luts": l, "page": 0, "lut_rel": None, "tags": prev_tags}
+    STATE[uid] = {
+        "in_path": in_path,
+        "cats": list_categories(),
+        "cat": CATEGORY_ALL,
+        "cat_page": 0,
+        "luts": l,
+        "page": 0,
+        "lut_rel": None,
+    }
 
-    bot.send_message(m.chat.id, "Photo received. Pick a LUT:", reply_markup=kb_luts(l, 0))
+    bot.send_message(m.chat.id, "Photo received. Pick a category:", reply_markup=kb_categories(STATE[uid]["cats"], 0))
 
 
 @bot.callback_query_handler(func=lambda c: True)
@@ -352,9 +394,46 @@ def cb(c):
         bot.edit_message_reply_markup(
             chat_id=c.message.chat.id,
             message_id=c.message.message_id,
-            reply_markup=kb_luts(st.get("luts", []), page),
+            reply_markup=kb_luts(st.get("luts", []), page, show_back=True),
         )
         bot.answer_callback_query(c.id)
+        return
+
+    if data.startswith("catpage|"):
+        page = int(data.split("|", 1)[1])
+        st["cat_page"] = page
+        bot.edit_message_reply_markup(
+            chat_id=c.message.chat.id,
+            message_id=c.message.message_id,
+            reply_markup=kb_categories(st.get("cats", []), page),
+        )
+        bot.answer_callback_query(c.id)
+        return
+
+    if data.startswith("cats|"):
+        st["cat_page"] = int(data.split("|", 1)[1])
+        bot.edit_message_text(
+            "Pick a category:",
+            chat_id=c.message.chat.id,
+            message_id=c.message.message_id,
+            reply_markup=kb_categories(st.get("cats", []), st["cat_page"]),
+        )
+        bot.answer_callback_query(c.id)
+        return
+
+    if data.startswith("cat|"):
+        _, page_str, cat = data.split("|", 2)
+        st["cat_page"] = int(page_str)
+        st["cat"] = cat
+        st["page"] = 0
+        st["luts"] = list_luts_by_category(cat)
+        bot.edit_message_text(
+            "Pick a filter:",
+            chat_id=c.message.chat.id,
+            message_id=c.message.message_id,
+            reply_markup=kb_luts(st.get("luts", []), 0, show_back=True),
+        )
+        bot.answer_callback_query(c.id, "Selected")
         return
 
     if data.startswith("lut|"):
@@ -362,7 +441,8 @@ def cb(c):
         st["page"] = int(page_str)
         st["lut_rel"] = rel
         bot.answer_callback_query(c.id, "Selected")
-        bot.send_message(c.message.chat.id, f"Selected LUT:\n{rel}\n\nPick intensity:", reply_markup=kb_intensity())
+        rel_display = rel[:-5] if rel.lower().endswith(".cube") else rel
+        bot.send_message(c.message.chat.id, f"Selected filter:\n{rel_display}\n\nPick intensity:", reply_markup=kb_intensity())
         return
 
     if data.startswith("int|"):
@@ -386,10 +466,8 @@ def cb(c):
         intensity = data.split("|", 1)[1]
         lut_rel = st.get("lut_rel")
         in_path = st.get("in_path")
-        tags = st.get("tags", "")
-
         if not lut_rel:
-            bot.answer_callback_query(c.id, "Pick a LUT first.")
+            bot.answer_callback_query(c.id, "Pick a filter first.")
             return
         if not in_path or not os.path.isfile(in_path):
             bot.answer_callback_query(c.id, "Send a photo again.")
@@ -407,7 +485,6 @@ def cb(c):
                 "in_path": in_path,
                 "lut_rel": lut_rel,
                 "intensity": intensity,
-                "tags": tags,
             })
             bot.answer_callback_query(c.id, "Queued")
         except queue.Full:

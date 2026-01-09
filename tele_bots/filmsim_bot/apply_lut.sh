@@ -52,8 +52,9 @@ if need exiftool; then
            "$OUTPUT" >/dev/null
 
   # Build subject/keyword args
-  SUBJECT_ARGS=( -XMP:Subject+="LUT:${LUT_BASENAME}" )
-  KEYWORD_ARGS=( -IPTC:Keywords+="LUT:${LUT_BASENAME}" )
+  HARD_TAG="Made on telegram with @FilmSimBot"
+  SUBJECT_ARGS=( -XMP:Subject+="LUT:${LUT_BASENAME}" -XMP:Subject+="$HARD_TAG" )
+  KEYWORD_ARGS=( -IPTC:Keywords+="LUT:${LUT_BASENAME}" -IPTC:Keywords+="$HARD_TAG" )
 
   # Split comma-separated tags, trim whitespace, append
   if [ -n "$TAGS_RAW" ]; then
@@ -77,4 +78,3 @@ if need exiftool; then
 else
   echo "Note: exiftool not found — output saved without metadata copy/annotation." >&2
 fi
-
