@@ -216,7 +216,7 @@ def worker_loop(n: int):
             )
 
             lut_name = lut_rel[:-5] if lut_rel.lower().endswith(".cube") else lut_rel
-            caption = f"{lut_name} filter @ {float(intensity):.2f}"
+            caption = f"{lut_name} recipie @ {float(intensity):.2f}"
             with open(out_path, "rb") as f:
                 bot.send_photo(chat_id, f, caption=caption)
             
@@ -261,7 +261,7 @@ for i in range(WORKERS):
 def start(m):
     bot.reply_to(
         m,
-        "Send me a photo, then choose a filter.\n\n"
+        "Send me a photo, then choose a recipe.\n\n"
         "Commands:\n"
         "/recipes  (browse film look recipes)\n"
         "/clear (forget current photo)\n"
@@ -467,7 +467,7 @@ def cb(c):
         lut_rel = st.get("lut_rel")
         in_path = st.get("in_path")
         if not lut_rel:
-            bot.answer_callback_query(c.id, "Pick a filter first.")
+            bot.answer_callback_query(c.id, "Pick a recipie first.")
             return
         if not in_path or not os.path.isfile(in_path):
             bot.answer_callback_query(c.id, "Send a photo again.")
