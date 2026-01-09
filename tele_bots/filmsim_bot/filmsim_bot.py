@@ -373,6 +373,48 @@ def photo(m):
 
     bot.send_message(m.chat.id, "Photo received. Pick a category:", reply_markup=kb_categories(STATE[uid]["cats"], 0))
 
+@bot.message_handler(content_types=["document"])
+def document(m):
+    uid = m.from_user.id
+    doc = m.document
+
+    # only accept JPEG / PNG
+    if not doc.mime_type or not doc.mime_type.startswith("image/"):
+        bot.reply_to(m, "Please send an image file (JPEG or PNG).")
+        return
+
+    if doc.file_size > 50 * 1024 * 1024:
+        bot.reply_to(m, "Image too large (max 50MB).")
+        return
+  
+    info = bot.get_file(doc.file_id)
+    data = bot.download_file(info.file_path)
+
+    d = user_dir(uid)
+    ext = os.path.splitext(doc.file_name or "")[1].lower()
+    if ext not in (".jpg", ".jpeg", ".png"):
+        ext = ".jpg"
+
+    in_path = os.path.join(d, f"in{ext}")
+    with open(in_path, "wb") as f:
+        f.write(data)
+
+    STATE[uid] = {
+        "in_path": in_path,
+        "cats": list_categories(),
+        "cat": CATEGORY_ALL,
+        "cat_page": 0,
+        "luts": list_luts(),
+        "page": 0,
+        "lut_rel": None,
+    }
+
+    bot.send_message(
+        m.chat.id,
+        "📎 Image received in full quality.\nPick a category:",
+        reply_markup=kb_categories(STATE[uid]["cats"], 0),
+    )
+
 
 @bot.callback_query_handler(func=lambda c: True)
 def cb(c):
