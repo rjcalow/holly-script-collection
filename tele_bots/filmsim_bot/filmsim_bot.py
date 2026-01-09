@@ -272,14 +272,15 @@ for i in range(WORKERS):
 def start(m):
     bot.reply_to(
         m,
-        "Send me a photo, then choose a recipe.\n\n"
+        "Send me a photo, or attach an image as a file for full quality.\n\n"
+        "How to send:\n"
+        "• Photo – quick preview (Telegram may compress)\n"
+        "• File (📎 → File) – full-resolution images\n\n"
         "Commands:\n"
-        "/recipes  (browse film look recipes)\n"
-        "/clear (forget current photo)\n"
-        "/usage (your current usage for today)\n"
+        "/recipes  – browse film look recipes\n"
+        "/clear    – forget current photo\n"
+        "/usage    – today’s usage\n"
     )
-
-
 @bot.message_handler(commands=["clear"])
 def clear(m):
     uid = m.from_user.id
