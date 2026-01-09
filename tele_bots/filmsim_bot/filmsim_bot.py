@@ -216,7 +216,7 @@ def worker_loop(n: int):
             )
 
             lut_name = lut_rel[:-5] if lut_rel.lower().endswith(".cube") else lut_rel
-            caption = f"{lut_name} recipie @ {float(intensity):.2f}"
+            caption = f"{lut_name} recipe @ {float(intensity):.2f}"
             with open(out_path, "rb") as f:
                 bot.send_photo(chat_id, f, caption=caption)
             
