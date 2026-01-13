@@ -43,7 +43,6 @@ gmic "$INPUT" -to_colormode 3 \
      -to_colormode[0] 2 \
      -o[0] "$OUTPUT"
 
-
 echo "Wrote: $OUTPUT (intensity=$INTENSITY)"
 
 # --- metadata copy + annotate (optional) ---
@@ -76,7 +75,7 @@ if need exiftool; then
   exiftool -overwrite_original -P \
            -EXIF:ImageDescription="$NOTE" \
            -XMP:Description="$NOTE" \
-           -XMP:CreatorTool="apply_lut.sh + G'MIC" \
+           -XMP:CreatorTool="$HARD_TAG" \
            "${SUBJECT_ARGS[@]}" \
            "${KEYWORD_ARGS[@]}" \
            "$OUTPUT" >/dev/null
