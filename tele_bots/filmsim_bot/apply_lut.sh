@@ -32,16 +32,14 @@ INTENSITY="$(awk -v v="$INTENSITY" 'BEGIN{ if (v+0<0) v=0; if (v+0>1) v=1; print
 
 # Apply LUT with linear blend:
 # [0]=orig, [1]=orig copy, [2]=LUT → map LUT to [1], then (1-a)*[0] + a*[1] → [0]
-gmic "$INPUT" -to_colormode 3 \
-     "$INPUT" -to_colormode 3 \
-     "$LUT" \
+gmic "$INPUT" "$INPUT" "$LUT" \
      map_clut[1] [2] rm[2] \
      mul[0] "{1-$INTENSITY}" \
      mul[1] "$INTENSITY" \
      add[0] [1] \
-     noise_rgb[0] 0.6,0,0,0 \
-     -to_colormode[0] 2 \
+     noise[0] 0.6,0 \
      -o[0] "$OUTPUT"
+
 
 echo "Wrote: $OUTPUT (intensity=$INTENSITY)"
 
