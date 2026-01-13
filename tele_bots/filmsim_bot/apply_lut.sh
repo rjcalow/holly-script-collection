@@ -21,6 +21,8 @@ LUT="$2"
 OUTPUT="$3"
 INTENSITY="${4:-1}"
 TAGS_RAW="${5:-}"
+TMP16="${OUTPUT}.tmp16.png"
+
 
 [ -f "$INPUT" ] || { echo "Error: input image not found: $INPUT" >&2; exit 3; }
 [ -f "$LUT"   ] || { echo "Error: LUT file not found: $LUT"   >&2; exit 4; }
@@ -30,15 +32,17 @@ mkdir -p "$(dirname "$OUTPUT")"
 [[ "$INTENSITY" == .* ]] && INTENSITY="0$INTENSITY"
 INTENSITY="$(awk -v v="$INTENSITY" 'BEGIN{ if (v+0<0) v=0; if (v+0>1) v=1; printf "%.6f", v+0 }')"
 
-# Apply LUT with linear blend:
-# [0]=orig, [1]=orig copy, [2]=LUT → map LUT to [1], then (1-a)*[0] + a*[1] → [0]
 gmic "$INPUT" "$INPUT" "$LUT" \
      map_clut[1] [2] rm[2] \
      mul[0] "{1-$INTENSITY}" \
      mul[1] "$INTENSITY" \
      add[0] [1] \
-     noise[0] 0.6,0 \
-     -o[0] "$OUTPUT"
+     -o[0] "$TMP16",16
+
+gmic "$TMP16" \
+     -noise 0.4,1 \
+     -o "$OUTPUT"
+
 
 
 echo "Wrote: $OUTPUT (intensity=$INTENSITY)"
