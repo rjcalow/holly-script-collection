@@ -69,9 +69,10 @@ STATE = {}
 # per-user lock to prevent stacking jobs
 USER_BUSY = set()
 
-# job queue
+# job queues (premium-first with fairness)
 Job = dict
-JOB_Q: "queue.Queue[Job]" = queue.Queue(maxsize=200)
+JOB_Q_PREMIUM: "queue.Queue[Job]" = queue.Queue(maxsize=200)
+JOB_Q_FREE: "queue.Queue[Job]" = queue.Queue(maxsize=200)
 
 
 def user_dir(user_id: int) -> str:
@@ -189,12 +190,39 @@ def cleanup_user_outputs(uid: int):
             pass
 
 
+def get_next_job(premium_streak: int, premium_quota: int = 3, timeout: float = 0.2):
+    """
+    Return (job, new_premium_streak). Enforces: do up to `premium_quota` premium jobs,
+    then allow 1 free job if available.
+    """
+    try_premium_first = premium_streak < premium_quota
+
+    if try_premium_first:
+        try:
+            return JOB_Q_PREMIUM.get(timeout=timeout), premium_streak + 1
+        except queue.Empty:
+            pass
+        try:
+            return JOB_Q_FREE.get(timeout=timeout), 0
+        except queue.Empty:
+            return None, premium_streak
+    else:
+        try:
+            return JOB_Q_FREE.get(timeout=timeout), 0
+        except queue.Empty:
+            pass
+        try:
+            return JOB_Q_PREMIUM.get(timeout=timeout), premium_streak + 1
+        except queue.Empty:
+            return None, premium_streak
+
+
 def worker_loop(n: int):
+    premium_streak = 0
     while True:
-        job = JOB_Q.get()
+        job, premium_streak = get_next_job(premium_streak)
         if job is None:
-            JOB_Q.task_done()
-            return
+            continue
 
         user_id = job["user_id"]
         chat_id = job["chat_id"]
@@ -202,6 +230,7 @@ def worker_loop(n: int):
         in_path = job["in_path"]
         lut_rel = job["lut_rel"]
         intensity = job["intensity"]
+        job_is_premium = job.get("is_premium", False)
         out_path = os.path.join(user_dir(user_id), "out.jpg")
 
         try:
@@ -259,7 +288,10 @@ def worker_loop(n: int):
                     pass
 
             USER_BUSY.discard(user_id)
-            JOB_Q.task_done()
+            if job_is_premium:
+                JOB_Q_PREMIUM.task_done()
+            else:
+                JOB_Q_FREE.task_done()
 
 
 # start workers
@@ -532,8 +564,13 @@ def cb(c):
         # enqueue job
         try:
             status = bot.send_message(c.message.chat.id, "Queued…")
-            JOB_Q.put_nowait({
+            is_premium = db.is_premium(uid)
+            if is_premium:
+                bot.send_message(c.message.chat.id, "⭐ Your export is being processed with priority.")
+            target_q = JOB_Q_PREMIUM if is_premium else JOB_Q_FREE
+            target_q.put_nowait({
                 "user_id": uid,
+                "is_premium": is_premium,
                 "chat_id": c.message.chat.id,
                 "status_msg_id": status.message_id,
                 "in_path": in_path,
@@ -544,7 +581,7 @@ def cb(c):
         except queue.Full:
             USER_BUSY.discard(uid)
             bot.answer_callback_query(c.id, "Busy right now — try again in a minute.")
-            bot.send_message(c.message.chat.id, "Server is busy. Try again shortly.")
+            bot.send_message(c.message.chat.id, "Sever is busy. Premium users skip the line with priority processing. /premium")
         return
 
     bot.answer_callback_query(c.id, "Unknown action.")
